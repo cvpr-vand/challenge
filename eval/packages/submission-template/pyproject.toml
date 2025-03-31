@@ -1,0 +1,11 @@
+[project]
+name = "submission_template"
+version = "0.1.0"
+description = "VAND 2025 submission template"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [] # TODO: Add your dependencies
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

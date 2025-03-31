@@ -1,0 +1,28 @@
+[project]
+name = "vand2025_eval"
+version = "0.1.0"
+description = "VAND 2025 evaluation script"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "submission-template",
+    "anomalib[core]",
+    "scikit-learn",
+]
+
+[tool.uv.sources]
+submission-template = { workspace = true }
+anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eval"]
+
+[project.scripts]
+eval = "eval.evaluate:eval"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

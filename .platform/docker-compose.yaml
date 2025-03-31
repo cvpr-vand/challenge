@@ -1,0 +1,31 @@
+services:
+  runner-0: # change this to runner-1, runner-2, etc.
+    build:
+      context: ..
+      dockerfile: .platform/DOCKERFILE
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 142g # 1/7 of the total memory in the server
+    mem_limit: 142g
+    shm_size: 2G
+    environment:
+      - RUNNER_TOKEN=${RUNNER_TOKEN} # Pass GitHub runner token as env variable
+      - NVIDIA_VISIBLE_DEVICES=${GPU_ID:-0} # Specify which GPU to use, default to 0
+      - HTTP_PROXY=${http_proxy:-}
+      - HTTPS_PROXY=${https_proxy:-}
+      - NO_PROXY=${no_proxy:-}
+    volumes:
+      - /mnt/data/datasets/datasets/:/home/user/datasets:ro # Mount datasets as read-only
+    entrypoint: |
+      /bin/bash -c '
+      if [ ! -f /home/user/actions-runner/.credentials ]; then
+        ./actions-runner/config.sh --url https://github.com/samet-akcay/vand-cvpr --token $RUNNER_TOKEN --labels vand2025-runner --unattended
+      fi
+      ./actions-runner/run.sh
+      '
