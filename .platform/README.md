@@ -9,7 +9,7 @@ docker build . -t vand2025-runner -f .platform/DOCKERFILE
 ## To run the docker image with id
 
 ```
-docker run --gpus gpu_id --shm-size 2G --memory 142g \
+docker run --gpus '"device=<gpu-id>"' --shm-size 2G --memory 142g \
 -i -t --mount type=bind,source=./datasets,target=/home/user/datasets,readonly \
 -d --name vand2025-runner-container-<id> vand2025-runner
 ```
