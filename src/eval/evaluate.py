@@ -12,7 +12,7 @@ from anomalib.data import ImageBatch, MVTecLOCO
 from anomalib.data.utils.download import DownloadProgressBar
 from anomalib.metrics import F1Max
 from sklearn.metrics import auc
-from submission_template.model import Model
+from eval.submission.model import Model
 from torch import nn
 from tqdm import tqdm
 
