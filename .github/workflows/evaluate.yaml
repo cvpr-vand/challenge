@@ -4,16 +4,22 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - 'src/eval/submission/**'
+      - "src/eval/submission/**"
 
 jobs:
   security-check:
     name: Security Check
     runs-on: vand2025-runner
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Run Zizmor security scan
+        with:
+          persist-credentials: false
         run: |
           uv tool install zizmor
           uvx zizmor .github/workflows/evaluate.yaml
