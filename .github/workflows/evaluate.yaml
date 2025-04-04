@@ -56,18 +56,13 @@ jobs:
             const result = JSON.parse(fs.readFileSync('results.json', 'utf8'));
             let result_string = "";
             for (const [key, value] of Object.entries(result)) {
-              result_string += `${key}: ${value}\\n`;
+              result_string += `${key}: ${value}\n`;
             }
-            const raw_metrics = fs.readFileSync('metrics.csv', 'utf8');
-            raw_metrics_string = "||seed|k_shot|category|image_score|pixel_score|\\n";
-            raw_metrics_string += "|---|---|---|---|---|---|\\n";
-            raw_metrics.split('\\n').forEach(line => {
-              if (line) {
-                const parts = line.split(',');
-                if (parts.length >= 6) {
-                   raw_metrics_string += `|${parts[0]}|${parts[1]}|${parts[2]}|${parts[3]}|${parts[4]}|${parts[5]}|\\n`;
-                }
-              }
+            const raw_metrics = fs.readFileSync('eval/metrics.csv', 'utf8');
+            raw_metrics_string = "||seed|k_shot|category|image_score|pixel_score|\n";
+            raw_metrics_string += "|---|---|---|---|---|---|\n";
+            raw_metrics.split('\n').forEach(line => {
+              raw_metrics_string += `|${line.split(',')[0]}|${line.split(',')[1]}|${line.split(',')[2]}|${line.split(',')[3]}|${line.split(',')[4]}|${line.split(',')[5]}|\n`;
             });
 
             const comment = `## Evaluation Results
@@ -121,7 +116,7 @@ jobs:
             touch .nojekyll
             git add .nojekyll
             git commit -m "Initialize gh-pages branch"
-            git push origin gh-pages
+            # Removed initial push, the action below will handle it.
           else
             git checkout gh-pages
           fi
@@ -155,13 +150,18 @@ jobs:
         run: |
           # Copy the saved static files to the gh-pages branch
           cp -r /tmp/static/* .
-      - name: Push New Results
+      - name: Commit results # Renamed from Push New Results
         env:
           PR_NAME: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_CREATOR: ${{ github.event.pull_request.user.login }}
         run: |
-          # Commit and push changes
+          # Commit changes
           git add .
           git commit -m "Add evaluation results for PR \"${PR_NAME}\" (#${PR_NUMBER}) by ${PR_CREATOR}"
-          git push origin gh-pages
+          # Removed git push command
+      - name: Push to gh-pages
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
