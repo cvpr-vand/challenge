@@ -58,7 +58,7 @@ jobs:
             for (const [key, value] of Object.entries(result)) {
               result_string += `${key}: ${value}\n`;
             }
-            const raw_metrics = fs.readFileSync('eval/metrics.csv', 'utf8');
+            const raw_metrics = fs.readFileSync('metrics.csv', 'utf8');
             raw_metrics_string = "||seed|k_shot|category|image_score|pixel_score|\n";
             raw_metrics_string += "|---|---|---|---|---|---|\n";
             raw_metrics.split('\n').forEach(line => {
