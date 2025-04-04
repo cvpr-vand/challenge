@@ -2,9 +2,11 @@ name: Evaluation Workflow
 
 on:
   pull_request:
+    branches:
+      - main
     types: [opened, synchronize]
     paths:
-      - 'eval/packages/submission-template/**'
+      - "eval/packages/submission-template/**"
 
 jobs:
   evaluate:
