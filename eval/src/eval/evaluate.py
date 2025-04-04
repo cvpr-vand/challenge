@@ -178,11 +178,11 @@ def compute_category_metrics(
         output = model(data.image.to(device))
 
         metric_batch = ImageBatch(
-            image=data.image,
-            pred_score=output.pred_score,
-            anomaly_map=output.anomaly_map if "anomaly_map" in output else None,
-            gt_label=data.gt_label,
-            gt_mask=data.gt_mask,
+            image=data.image.to(device),
+            pred_score=output.pred_score.to(device),
+            anomaly_map=output.anomaly_map.to(device) if "anomaly_map" in output else None,
+            gt_label=data.gt_label.to(device),
+            gt_mask=data.gt_mask.to(device),
         )
         # Update the image metric
         image_metric.update(metric_batch)
