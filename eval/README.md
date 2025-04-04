@@ -2,7 +2,7 @@
 
 This repository contains the official evaluation script and framework for the **Visual Anomaly and Novelty Detection (VAND) 2025 Challenge**. It focuses on evaluating few-shot anomaly detection performance on the MVTec LOCO dataset.
 
-> **[IMPORTANT]** Participants should only modify the code within the `packages/submission-template` directory to implement their solution. Do **not** modify the core evaluation scripts in `src/eval`. Refer to `RULES.md` (if provided) and the documentation within `packages/submission-template` for detailed submission guidelines.
+> [!IMPORTANT] Participants should only modify the code within the `packages/submission-template` directory to implement their solution. Do **not** modify the core evaluation scripts in `src/eval`. Refer to `RULES.md` (if provided) and the documentation within `packages/submission-template` for detailed submission guidelines.
 
 ## Overview
 
