@@ -14,7 +14,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Run Zizmor security scan
-        uses: woodruffw/zizmor-action@v1 # Using the dedicated zizmor action
+        run: |
+          uv tool install zizmor
+          uvx zizmor .github/workflows/evaluate.yaml
 
   evaluate:
     needs: security-check # Make this job wait for security-check
