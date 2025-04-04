@@ -3,6 +3,8 @@ name: Evaluation Workflow
 on:
   pull_request:
     types: [opened, synchronize]
+    paths:
+      - "src/eval/submission/**"
 
 jobs:
   security-check:
@@ -16,8 +18,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Run Zizmor security scan
-        with:
-          persist-credentials: false
         run: |
           uv tool install zizmor
           uvx zizmor .github/workflows/evaluate.yaml
