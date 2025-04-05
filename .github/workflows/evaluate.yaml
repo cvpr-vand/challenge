@@ -7,6 +7,7 @@ on:
     types: [opened, synchronize]
     paths:
       - "eval/packages/submission-template/**"
+  workflow_dispatch: # manually trigger the workflow
 
 jobs:
   evaluate:
