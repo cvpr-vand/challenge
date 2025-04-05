@@ -15,6 +15,7 @@ from sklearn.metrics import auc
 from submission_template.model import Model
 from torch import nn
 from tqdm import tqdm
+from torchvision.transforms import Resize
 
 CATEGORIES = [
     "breakfast_box",
@@ -83,6 +84,7 @@ def get_datamodule(dataset_path: Path | str, category: str) -> MVTecLOCO:
         root=dataset_path,
         category=category,
         eval_batch_size=1,
+        augmentations=Resize((256, 256)),
     )
     datamodule.setup()
 
