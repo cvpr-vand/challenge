@@ -44,7 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-results
-          path: results.json
+          path: eval/results.json
           retention-days: 30
       - name: Add results comment
         uses: actions/github-script@v7
@@ -54,12 +54,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const result = JSON.parse(fs.readFileSync('results.json', 'utf8'));
+            const result = JSON.parse(fs.readFileSync('eval/results.json', 'utf8'));
             let result_string = "";
             for (const [key, value] of Object.entries(result)) {
               result_string += `${key}: ${value}\n`;
             }
-            const raw_metrics = fs.readFileSync('metrics.csv', 'utf8');
+            const raw_metrics = fs.readFileSync('eval/metrics.csv', 'utf8');
             raw_metrics_string = "||seed|k_shot|category|image_score|pixel_score|\n";
             raw_metrics_string += "|---|---|---|---|---|---|\n";
             raw_metrics.split('\n').forEach(line => {
