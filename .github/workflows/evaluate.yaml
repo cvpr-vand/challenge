@@ -2,15 +2,29 @@ name: Evaluation Workflow
 
 on:
   pull_request:
-    branches:
-      - main
     types: [opened, synchronize]
     paths:
       - "eval/packages/submission-template/**"
   workflow_dispatch: # manually trigger the workflow
 
 jobs:
+  security-check:
+    name: Security Check
+    runs-on: vand2025-runner
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run Zizmor security scan
+        run: |
+          uv tool install zizmor
+          uvx zizmor .github/workflows/evaluate.yaml
+
   evaluate:
+    needs: security-check # Make this job wait for security-check
     runs-on: vand2025-runner
     permissions:
       contents: write
@@ -19,31 +33,33 @@ jobs:
     steps:
       - name: Checkout PR code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Run evaluation
-        timeout-minutes: 180 # 3 hours timeout
+        timeout-minutes: 300 # 5 hours timeout
         run: |
-          cd eval
           GIT_LFS_SKIP_SMUDGE=1 uv sync
           uv run eval --dataset_path=/home/user/datasets/mvtec_loco
-          cd ..
       - name: Upload evaluation results
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-results
-          path: eval/results.json
+          path: results.json
           retention-days: 30
       - name: Add results comment
         uses: actions/github-script@v7
+        env:
+          PR_USER_LOGIN: ${{ github.event.pull_request.user.login }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const result = JSON.parse(fs.readFileSync('eval/results.json', 'utf8'));
+            const result = JSON.parse(fs.readFileSync('results.json', 'utf8'));
             let result_string = "";
             for (const [key, value] of Object.entries(result)) {
               result_string += `${key}: ${value}\n`;
             }
-            const raw_metrics = fs.readFileSync('eval/metrics.csv', 'utf8');
+            const raw_metrics = fs.readFileSync('metrics.csv', 'utf8');
             raw_metrics_string = "||seed|k_shot|category|image_score|pixel_score|\n";
             raw_metrics_string += "|---|---|---|---|---|---|\n";
             raw_metrics.split('\n').forEach(line => {
@@ -53,7 +69,7 @@ jobs:
             const comment = `## Evaluation Results
             ${result_string}
             ${raw_metrics_string}
-            Created by: ${{ github.event.pull_request.user.login }}`;
+            Created by: ${process.env.PR_USER_LOGIN}`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -73,6 +89,8 @@ jobs:
     steps:
       - name: Checkout PR code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions Bot"
@@ -99,7 +117,7 @@ jobs:
             touch .nojekyll
             git add .nojekyll
             git commit -m "Initialize gh-pages branch"
-            git push origin gh-pages
+            # Removed initial push, the action below will handle it.
           else
             git checkout gh-pages
           fi
@@ -109,6 +127,12 @@ jobs:
           name: evaluation-results
           path: /tmp/merge
       - name: Merge results
+        env:
+          PR_NAME: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CREATOR: ${{ github.event.pull_request.user.login }}
+          PR_SHA: $(cat /tmp/pr_sha)
+          TIMESTAMP: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
         run: |
           # Copy results.csv to the merge directory if it exists
           if [ -f results.csv ]; then
@@ -118,13 +142,7 @@ jobs:
           cd /tmp/merge
           uv sync
 
-          # Get the saved PR SHA
-          PR_SHA=$(cat /tmp/pr_sha)
-          # Read the evaluation output and append to results.csv
-          PR_NAME="${{ github.event.pull_request.title }}"
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          PR_CREATOR="${{ github.event.pull_request.user.login }}"
-          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          # Use environment variables for the uv run command
           uv run merge --pr_name="${PR_NAME}" --pr_number="${PR_NUMBER}" --pr_author="${PR_CREATOR}" --timestamp="${TIMESTAMP}" --pr_sha="${PR_SHA}"
 
           # Copy the merged results.csv back to the gh-pages branch
@@ -133,13 +151,18 @@ jobs:
         run: |
           # Copy the saved static files to the gh-pages branch
           cp -r /tmp/static/* .
-      - name: Push New Results
+      - name: Commit results # Renamed from Push New Results
+        env:
+          PR_NAME: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CREATOR: ${{ github.event.pull_request.user.login }}
         run: |
-          # Commit and push changes
-          PR_NAME="${{ github.event.pull_request.title }}"
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          PR_CREATOR="${{ github.event.pull_request.user.login }}"
-
+          # Commit changes
           git add .
           git commit -m "Add evaluation results for PR \"${PR_NAME}\" (#${PR_NUMBER}) by ${PR_CREATOR}"
-          git push origin gh-pages
+          # Removed git push command
+      - name: Push to gh-pages
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
