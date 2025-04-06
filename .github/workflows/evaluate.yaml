@@ -38,8 +38,10 @@ jobs:
       - name: Run evaluation
         timeout-minutes: 300 # 5 hours timeout
         run: |
+          cd eval
           GIT_LFS_SKIP_SMUDGE=1 uv sync
           uv run eval --dataset_path=/home/user/datasets/mvtec_loco
+          cd ..
       - name: Upload evaluation results
         uses: actions/upload-artifact@v4
         with:
