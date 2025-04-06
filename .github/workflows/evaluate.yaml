@@ -4,7 +4,8 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - "src/eval/submission/**"
+      - "eval/packages/submission-template/**"
+  workflow_dispatch: # manually trigger the workflow
 
 jobs:
   security-check:
