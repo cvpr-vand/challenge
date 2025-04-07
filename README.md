@@ -37,7 +37,6 @@ This project uses [`uv`](https://github.com/astral-sh/uv) for package management
 - `anomalib`: For MVTec LOCO dataset handling and metrics.
 - `scikit-learn`: For calculating the Area Under Curve (AUC).
 - `torch`: The deep learning framework.
-- `submission-template`: The local package containing the participant's model.
 
 ## Project Structure
 

@@ -36,7 +36,7 @@ Please read these rules carefully before participating.
 ## 5. Submission Guidelines
 
 - **Format:**
-  - Code must be packaged within the provided `eval/packages/submission-template/` directory.
+  - Code must be packaged within the provided `src/eval/submission/` directory.
   - Participants must implement the `Model` class in `model.py`.
 - **Code Requirements:**
   - The submission system uses single Nvidia 3090 GPUs and 166GB of RAM per runner. The submission is expected to run within these constraints.
