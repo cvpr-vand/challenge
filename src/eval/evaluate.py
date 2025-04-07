@@ -9,14 +9,13 @@ from urllib.request import urlretrieve
 import pandas as pd
 import torch
 from anomalib.data import ImageBatch, MVTecLOCO
-from anomalib.data.utils import TestSplitMode
 from anomalib.data.utils.download import DownloadProgressBar
 from anomalib.metrics import F1Max
 from sklearn.metrics import auc
-from submission_template.model import Model
 from torch import nn
-from torchvision.transforms import Resize
 from tqdm import tqdm
+
+from eval.submission.model import Model
 
 CATEGORIES = [
     "breakfast_box",
@@ -80,13 +79,10 @@ def get_datamodule(dataset_path: Path | str, category: str) -> MVTecLOCO:
         MVTec: MVTec datamodule.
     """
     # Create the dataset
-    # NOTE: We fix the image size to (256, 256) for consistent evaluation across all models.
     datamodule = MVTecLOCO(
         root=dataset_path,
         category=category,
         eval_batch_size=1,
-        augmentations=Resize((256, 256)),
-        test_split_mode=TestSplitMode.FROM_DIR,
     )
     datamodule.setup()
 

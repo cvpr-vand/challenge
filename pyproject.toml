@@ -8,14 +8,12 @@ dependencies = [
     "submission-template",
     "anomalib[core]",
     "scikit-learn",
+    # TODO: Add your additional dependencies here
 ]
 
 [tool.uv.sources]
-submission-template = { workspace = true }
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
 
-[tool.uv.workspace]
-members = ["packages/*"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/eval"]
