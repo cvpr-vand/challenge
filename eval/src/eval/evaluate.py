@@ -184,7 +184,7 @@ def compute_category_metrics(
         # Update the pixel metric
         if "anomaly_map" in output:
             pixel_metric.update(y_true=data.gt_mask.cpu().numpy(), y_pred=output.anomaly_map.cpu().numpy())
-            
+
     # Compute the metrics
     category_metrics = {"image_score": image_metric.compute().item()}
     if pixel_metric.update_called:
