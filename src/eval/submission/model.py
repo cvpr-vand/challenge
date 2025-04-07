@@ -8,6 +8,7 @@ from torch import nn
 
 class Model(nn.Module):
     """TODO: Implement your model here"""
+
     def __init__(self):
         super().__init__()
         self.winclip = WinClipModel()
