@@ -13,12 +13,6 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 
-[manifest]
-members = [
-    "submission-template",
-    "vand2025-eval",
-]
-
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
@@ -1909,11 +1903,6 @@ wheels = [
 ]
 
 [[package]]
-name = "submission-template"
-version = "0.1.0"
-source = { editable = "packages/submission-template" }
-
-[[package]]
 name = "sympy"
 version = "1.13.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2125,14 +2114,12 @@ source = { editable = "." }
 dependencies = [
     { name = "anomalib", extra = ["core"] },
     { name = "scikit-learn" },
-    { name = "submission-template" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "anomalib", extras = ["core"], git = "https://github.com/openvinotoolkit/anomalib.git?branch=main" },
     { name = "scikit-learn" },
-    { name = "submission-template", editable = "packages/submission-template" },
 ]
 
 [[package]]

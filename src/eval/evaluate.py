@@ -12,10 +12,10 @@ from anomalib.data import ImageBatch, MVTecLOCO
 from anomalib.data.utils.download import DownloadProgressBar
 from anomalib.metrics import F1Max
 from sklearn.metrics import auc
-from submission_template.model import Model
 from torch import nn
 from tqdm import tqdm
-from torchvision.transforms import Resize
+
+from eval.submission.model import Model
 
 CATEGORIES = [
     "breakfast_box",
@@ -79,12 +79,10 @@ def get_datamodule(dataset_path: Path | str, category: str) -> MVTecLOCO:
         MVTec: MVTec datamodule.
     """
     # Create the dataset
-    # NOTE: We fix the image size to (256, 256) for consistent evaluation across all models.
     datamodule = MVTecLOCO(
         root=dataset_path,
         category=category,
         eval_batch_size=1,
-        augmentations=Resize((256, 256)),
     )
     datamodule.setup()
 
@@ -95,9 +93,7 @@ def download(url: str) -> Path:
     root = Path(gettempdir())
     downloaded_file_path = root / url.split("/")[-1]
     if url.startswith("http://") or url.startswith("https://"):
-        with DownloadProgressBar(
-            unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]
-        ) as progress_bar:
+        with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]) as progress_bar:
             urlretrieve(  # noqa: S310  # nosec B310
                 url=f"{url}",
                 filename=downloaded_file_path,
@@ -168,9 +164,7 @@ def compute_category_metrics(
 
     # pass few-shot images and dataset category to model
     setup_data = {
-        "few_shot_samples": torch.stack(
-            [datamodule.train_data[idx].image for idx in k_shot_idxs]
-        ).to(device),
+        "few_shot_samples": torch.stack([datamodule.train_data[idx].image for idx in k_shot_idxs]).to(device),
         "dataset_category": datamodule.category,
     }
     model.setup(setup_data)
@@ -221,14 +215,10 @@ def compute_average_metrics(
         df.to_csv("metrics.csv")
 
     # Compute the average metrics for each seed and k_shot across categories
-    average_seed_performance = (
-        df.groupby(["k_shot", "category"])[["image_score"]].mean().reset_index()
-    )
+    average_seed_performance = df.groupby(["k_shot", "category"])[["image_score"]].mean().reset_index()
 
     # Calculate the mean image and pixel performance for each k-shot
-    k_shot_performance = (
-        average_seed_performance.groupby("k_shot")[["image_score"]].mean().reset_index()
-    )
+    k_shot_performance = average_seed_performance.groupby("k_shot")[["image_score"]].mean().reset_index()
 
     # Extract the k-shot numbers and their corresponding average image scores
     k_shot_numbers = k_shot_performance["k_shot"]
@@ -238,9 +228,7 @@ def compute_average_metrics(
     aufc = auc(k_shot_numbers, average_image_scores)
 
     # Get the normalized aufc score
-    normalized_k_shot_numbers = (k_shot_numbers - k_shot_numbers.min()) / (
-        k_shot_numbers.max() - k_shot_numbers.min()
-    )
+    normalized_k_shot_numbers = (k_shot_numbers - k_shot_numbers.min()) / (k_shot_numbers.max() - k_shot_numbers.min())
     normalized_aufc = auc(normalized_k_shot_numbers, average_image_scores)
 
     # Directly calculate the average image score across all k-shot performances
@@ -292,9 +280,7 @@ def evaluate_submission(
                         "k_shot": k_shot,
                         "category": category,
                         "image_score": category_metrics["image_score"],
-                        "pixel_score": category_metrics.get(
-                            "pixel_score", float("nan")
-                        ),
+                        "pixel_score": category_metrics.get("pixel_score", float("nan")),
                     }
                 )
 
