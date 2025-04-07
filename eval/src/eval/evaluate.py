@@ -8,9 +8,9 @@ from urllib.request import urlretrieve
 
 import pandas as pd
 import torch
-from anomalib.data import ImageBatch, MVTecLOCO
+from anomalib.data import MVTecLOCO
 from anomalib.data.utils.download import DownloadProgressBar
-from anomalib.metrics import F1Max
+from eval.f1_max import F1Max
 from sklearn.metrics import auc
 from submission_template.model import Model
 from torch import nn
@@ -157,10 +157,8 @@ def compute_category_metrics(
     model.to(device)
 
     # Create the metrics
-    image_metric, pixel_metric = (
-        F1Max(fields=["pred_score", "gt_label"], prefix="image_"),
-        F1Max(fields=["anomaly_map", "gt_mask"], prefix="pixel_", strict=False),
-    )
+    image_metric, pixel_metric = F1Max(), F1Max()
+
 
     # Sample k_shot images from the training set.
     torch.manual_seed(seed)
@@ -175,27 +173,19 @@ def compute_category_metrics(
     }
     model.setup(setup_data)
 
+
     # Loop over the test set and compute the metrics
     for data in datamodule.test_dataloader():
         output = model(data.image.to(device))
 
-        metric_batch = ImageBatch(
-            image=data.image.to(device),
-            pred_score=output.pred_score.to(device),
-            anomaly_map=output.anomaly_map.to(device) if "anomaly_map" in output else None,
-            gt_label=data.gt_label.to(device),
-            gt_mask=data.gt_mask.to(device),
-        )
         # Update the image metric
-        image_metric.update(metric_batch)
+        image_metric.update(y_true=data.gt_label.cpu().numpy(), y_pred=output.pred_score.cpu().numpy())
 
-        # TODO: Do not compute pixel metrics as it is already computation intensive.
         # Update the pixel metric
         if "anomaly_map" in output:
-            pixel_metric.update(metric_batch)
-
+            pixel_metric.update(y_true=data.gt_mask.cpu().numpy(), y_pred=output.anomaly_map.cpu().numpy())
+            
     # Compute the metrics
-    # TODO: Double check if pixel_score is required.
     category_metrics = {"image_score": image_metric.compute().item()}
     if pixel_metric.update_called:
         category_metrics["pixel_score"] = pixel_metric.compute().item()
