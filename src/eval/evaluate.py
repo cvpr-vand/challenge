@@ -4,18 +4,21 @@ import argparse
 import json
 from pathlib import Path
 from tempfile import gettempdir
+from typing import cast
 from urllib.request import urlretrieve
 
 import pandas as pd
 import torch
-from anomalib.data import ImageBatch, MVTecLOCO
+from anomalib.data import ImageBatch, MVTecLOCODataset
+from anomalib.data.utils import Split
 from anomalib.data.utils.download import DownloadProgressBar
-from anomalib.metrics import F1Max
+from anomalib.metrics.f1_score import _F1Max
+from eval.submission.model import Model
 from sklearn.metrics import auc
 from torch import nn
+from torch.utils.data import DataLoader
+from torchvision.transforms.v2 import Resize
 from tqdm import tqdm
-
-from eval.submission.model import Model
 
 CATEGORIES = [
     "breakfast_box",
@@ -24,6 +27,9 @@ CATEGORIES = [
     "screw_bag",
     "splicing_connectors",
 ]
+
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,12 +44,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         nargs="*",
         default=[42, 0, 1234],
-        help="List of seed values for reproducibility. Ignored if --seed is provided. Default is [42, 0, 1234].",
+        help="List of seed values for reproducibility. Default is [42, 0, 1234].",
     )
     parser.add_argument(
         "--k_shot",
         type=int,
-        help="Single value for few-shot learning. This overwrites --k_shots if both are provided.",
+        help="Single value for few-shot learning. Overwrites --k_shots if provided.",
     )
     parser.add_argument(
         "--k_shots",
@@ -52,7 +58,6 @@ def parse_args() -> argparse.Namespace:
         default=[1, 2, 4, 8],
         help="List of integers for few-shot learning samples.",
     )
-
     parser.add_argument(
         "--dataset_path",
         type=Path,
@@ -68,133 +73,131 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def get_datamodule(dataset_path: Path | str, category: str) -> MVTecLOCO:
-    """Get the MVTec LOCO datamodule.
+def get_dataloaders(dataset_path: Path | str, category: str) -> tuple[DataLoader, DataLoader]:
+    """Get the MVTec LOCO dataloader.
 
     Args:
         dataset_path (Path | str): Path to the dataset.
         category (str): Category of the MVTec dataset.
 
     Returns:
-        MVTec: MVTec datamodule.
+        tuple[DataLoader, DataLoader]: Tuple of train and test dataloaders.
     """
     # Create the dataset
-    datamodule = MVTecLOCO(
+    # NOTE: We fix the image size to (256, 256) for consistent evaluation across all models.
+    train_dataset = MVTecLOCODataset(
         root=dataset_path,
         category=category,
-        eval_batch_size=1,
+        split=Split.TRAIN,
+        augmentations=Resize((256, 256)),
     )
-    datamodule.setup()
+    test_dataset = MVTecLOCODataset(
+        root=dataset_path,
+        category=category,
+        split=Split.TEST,
+        augmentations=Resize((256, 256)),
+    )
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=train_dataset.collate_fn
+    )
+    test_dataloader = DataLoader(
+        test_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=test_dataset.collate_fn
+    )
 
-    return datamodule
+    return train_dataloader, test_dataloader
 
 
 def download(url: str) -> Path:
+    """Download a file from a URL.
+
+    Args:
+        url (str): URL of the file to download.
+
+    Returns:
+        Path: Path to the downloaded file.
+    """
     root = Path(gettempdir())
     downloaded_file_path = root / url.split("/")[-1]
-    if url.startswith("http://") or url.startswith("https://"):
-        with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]) as progress_bar:
-            urlretrieve(  # noqa: S310  # nosec B310
-                url=f"{url}",
-                filename=downloaded_file_path,
-                reporthook=progress_bar.update_to,
-            )
-    else:
-        message = f"URL {url} is not valid. Please check the URL."
-        raise ValueError(message)
+    if not downloaded_file_path.exists():  # Check if file already exists
+        if url.startswith("http://") or url.startswith("https://"):
+            with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]) as progress_bar:
+                urlretrieve(  # noqa: S310  # nosec B310
+                    url=f"{url}",
+                    filename=downloaded_file_path,
+                    reporthook=progress_bar.update_to,
+                )
+        else:
+            message = f"URL {url} is not valid. Please check the URL."
+            raise ValueError(message)
     return downloaded_file_path
 
 
-def get_model(category: str) -> nn.Module:
-    """Get model.
+def get_model(
+    category: str,
+) -> nn.Module:
+    """Instantiate and potentially load weights for the model.
 
     Args:
-        category (str): Category of the dataset. This can be used to download specific weights for each category.
+        category (str): Category of the dataset. Used for potentially loading category-specific weights.
 
     Returns:
-        nn.Module: Loaded model.
+        nn.Module: Loaded model moved to the specified device.
     """
-
-    # instantiate model
     model = Model()
     model.eval()
 
-    # load weights
-    if model.weights_url(category) is not None:
-        weights_path = download(model.weights_url)
-        model.load_state_dict(torch.load(weights_path))
+    weights_url = model.weights_url(category)
+    if weights_url is not None:
+        weights_path = download(weights_url)
+        model.load_state_dict(torch.load(weights_path, map_location=DEVICE))
 
-    return model
+    return model.to(DEVICE)
 
 
-def compute_category_metrics(
-    datamodule: MVTecLOCO,
+def compute_kshot_metrics(
+    train_dataset: MVTecLOCODataset,
+    test_dataloader: DataLoader,
     model: nn.Module,
     k_shot: int,
     seed: int,
-    device: torch.device | None = None,
 ) -> dict[str, float]:
-    """Compute category-wise metrics.
+    """Compute metrics for a specific k-shot setting.
 
     Args:
-        datamodule (MVTecLOCO): MVTec LOCO datamodule for the category.
-        model (nn.Module): Model for the category.
-        k_shot (int): k-shot
-        seed (int): Seed value for reproducibility.
-        device (torch.device): Device to run the model on.
+        train_dataset (MVTecLOCODataset): Training dataset (used for sampling few-shot images).
+        test_dataloader (DataLoader): Test dataloader for the category.
+        model (nn.Module): The model instance (already on the correct device).
+        k_shot (int): The number of few-shot samples (k).
+        seed (int): Seed value for reproducibility of few-shot sampling.
 
     Returns:
-        dict[str, float]: Category-wise metrics.
+        dict[str, float]: Computed metrics for this k-shot setting.
     """
-    # Get the device
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    image_metric = _F1Max().to(DEVICE)
 
-    # Move the model to the device
-    model.to(device)
-
-    # Create the metrics
-    image_metric, pixel_metric = (
-        F1Max(fields=["pred_score", "gt_label"], prefix="image_"),
-        F1Max(fields=["anomaly_map", "gt_mask"], prefix="pixel_", strict=False),
-    )
-
-    # Sample k_shot images from the training set.
+    # Sample k_shot images from the training set deterministically
     torch.manual_seed(seed)
-    k_shot_idxs = torch.randperm(len(datamodule.train_data))[:k_shot].tolist()
+    k_shot_idxs = torch.randperm(len(train_dataset))[:k_shot].tolist()
 
-    # pass few-shot images and dataset category to model
+    # Pass few-shot images and dataset category to model's setup method
+    few_shot_images = torch.stack([cast(ImageBatch, train_dataset[idx]).image for idx in k_shot_idxs]).to(DEVICE)
     setup_data = {
-        "few_shot_samples": torch.stack([datamodule.train_data[idx].image for idx in k_shot_idxs]).to(device),
-        "dataset_category": datamodule.category,
+        "few_shot_samples": few_shot_images,
+        "dataset_category": train_dataset.category,
     }
     model.setup(setup_data)
 
-    # Loop over the test set and compute the metrics
-    for data in datamodule.test_dataloader():
-        output = model(data.image.to(device))
+    # Inference loop
+    model.eval()  # Ensure model is in eval mode
+    with torch.no_grad():  # Disable gradient calculations for inference
+        for data in tqdm(test_dataloader, desc=f"k={k_shot} Inference", leave=False):
+            output = model(data.image.to(DEVICE))
+            image_metric.update(output.pred_score, data.gt_label.to(DEVICE))
 
-        metric_batch = ImageBatch(
-            image=data.image.to(device),
-            pred_score=output.pred_score.to(device),
-            anomaly_map=output.anomaly_map.to(device) if "anomaly_map" in output else None,
-            gt_label=data.gt_label.to(device),
-            gt_mask=data.gt_mask.to(device),
-        )
-        # Update the image metric
-        image_metric.update(metric_batch)
+    # Compute final metrics
+    k_shot_metrics = {"image_score": image_metric.compute().item()}
 
-        # TODO: Do not compute pixel metrics as it is already computation intensive.
-        # Update the pixel metric
-        if "anomaly_map" in output:
-            pixel_metric.update(metric_batch)
-
-    # Compute the metrics
-    # TODO: Double check if pixel_score is required.
-    category_metrics = {"image_score": image_metric.compute().item()}
-    if pixel_metric.update_called:
-        category_metrics["pixel_score"] = pixel_metric.compute().item()
-
-    return category_metrics
+    return k_shot_metrics
 
 
 def compute_average_metrics(
@@ -203,8 +206,7 @@ def compute_average_metrics(
     """Compute the average metrics across all seeds and categories.
 
     Args:
-        metrics (list[dict[str, int  |  float]] | pd.DataFrame): List of metrics
-            for each seed and category.
+        metrics (list[dict[str, int | float]] | pd.DataFrame): Collected metrics.
 
     Returns:
         dict[str, float]: Average metrics across all seeds and categories.
@@ -249,38 +251,45 @@ def evaluate_submission(
     k_shots: list[int],
     dataset_path: Path | str,
 ) -> dict[str, float]:
-    """Evaluate the submission.
+    """Run the full evaluation across seeds, categories, and k-shots.
 
     Args:
-        seeds (list[int]): List of seed values to generate random perturbations.
-        k_shots (list[int]): List of integers for few-shot learning samples.
+        seeds (list[int]): List of seed values.
+        k_shots (list[int]): List of k-shot values.
         dataset_path (Path | str): Path to the dataset.
+
+    Returns:
+        dict[str, float]: Final averaged metrics.
     """
-    # Initialize a list to store the metrics for each seed and category.
     metrics = []
-    for seed in tqdm(seeds, desc="Processing Seeds"):
-        for category in tqdm(CATEGORIES, desc="Processing Categories", leave=False):
-            # Create the datamodule.
-            datamodule = get_datamodule(dataset_path, category)
-            for k_shot in tqdm(k_shots, desc="Processing k-shots", leave=False):
-                # Initialize the model for the seed, category, and k-shot.
-                model = get_model(category)
-                # Compute the category-wise metrics.
-                category_metrics = compute_category_metrics(
-                    datamodule=datamodule,
+    print(f"Using device: {DEVICE}")
+
+    for category in tqdm(CATEGORIES, desc="Processing Categories"):
+        # --- Per-Category Setup ---
+        # Load model once per category
+        model = get_model(category)
+        # Load data once per category
+        train_dataloader, test_dataloader = get_dataloaders(dataset_path, category)
+        train_dataset = cast(MVTecLOCODataset, train_dataloader.dataset)  # Get underlying dataset
+
+        for seed in tqdm(seeds, desc=f"Category {category} Seeds", leave=False):
+            for k_shot in k_shots:  # No tqdm here, handled in compute_kshot_metrics
+                # Compute metrics for this specific seed/category/k-shot combination
+                k_shot_metrics = compute_kshot_metrics(
+                    train_dataset=train_dataset,
+                    test_dataloader=test_dataloader,
                     model=model,
                     k_shot=k_shot,
                     seed=seed,
                 )
 
-                # Append the metrics to the metrics list.
+                # Append results
                 metrics.append(
                     {
                         "seed": seed,
                         "k_shot": k_shot,
                         "category": category,
-                        "image_score": category_metrics["image_score"],
-                        "pixel_score": category_metrics.get("pixel_score", float("nan")),
+                        "image_score": k_shot_metrics["image_score"],
                     }
                 )
 
@@ -298,7 +307,7 @@ def eval():
         dataset_path=args.dataset_path,
     )
     with open("results.json", "w") as f:
-        json.dump(result, f)
+        json.dump(result, f, indent=2)
 
 
 if __name__ == "__main__":

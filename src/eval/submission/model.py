@@ -36,8 +36,8 @@ class Model(nn.Module):
             ImageBatch: The output image batch.
         """
         # TODO: Implement the forward pass of the model.
+        batch_size = image.shape[0]
         return ImageBatch(
             image=image,
-            pred_score=torch.zeros(image.shape[0]),
-            anomaly_map=torch.zeros(1, *image.shape[2:]),
+            pred_score=torch.zeros(batch_size, device=image.device),
         )
