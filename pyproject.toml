@@ -5,7 +5,7 @@ description = "VAND 2025 evaluation script"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "anomalib[core]",
+    "anomalib[full]",
     "scikit-learn",
     # TODO: Add your additional dependencies here
 ]
@@ -30,5 +30,6 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 
-[tool.ruff.format]
-# Optional: Configure Ruff's formatter
+[tool.ruff.lint.isort]
+known-first-party = ["eval"]
+
