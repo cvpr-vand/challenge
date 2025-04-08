@@ -98,10 +98,10 @@ def get_dataloaders(dataset_path: Path | str, category: str) -> tuple[DataLoader
         augmentations=Resize((256, 256)),
     )
     train_dataloader = DataLoader(
-        train_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=ImageBatch.collate
+        train_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=train_dataset.collate_fn
     )
     test_dataloader = DataLoader(
-        test_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=ImageBatch.collate
+        test_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=test_dataset.collate_fn
     )
 
     return train_dataloader, test_dataloader
