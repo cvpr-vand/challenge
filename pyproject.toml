@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-anomalib = { git = "https://github.com/ashwinvaidya17/anomalib", branch = "ashwin/fix_mvtecloco" }
+anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" } 
 
 
 [tool.hatch.build.targets.wheel]
@@ -32,6 +32,3 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["eval"]
-
-[tool.ruff.format]
-# Optional: Configure Ruff's formatter
