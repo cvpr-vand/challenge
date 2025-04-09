@@ -20,7 +20,7 @@ jobs:
       - name: Run Zizmor security scan
         run: |
           uv tool install zizmor
-          uvx zizmor .github/workflows/evaluate.yaml
+          uvx zizmor --config zizmor.yml .github/workflows/evaluate.yaml
 
   evaluate:
     needs: security-check
