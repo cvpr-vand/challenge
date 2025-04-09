@@ -13,12 +13,13 @@ from anomalib.data import ImageBatch, MVTecLOCODataset
 from anomalib.data.utils import Split
 from anomalib.data.utils.download import DownloadProgressBar
 from anomalib.metrics.f1_score import _F1Max
-from eval.submission.model import Model
 from sklearn.metrics import auc
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.transforms.v2 import Resize
 from tqdm import tqdm
+
+from eval.submission.model import Model
 
 CATEGORIES = [
     "breakfast_box",
@@ -73,12 +74,13 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def get_dataloaders(dataset_path: Path | str, category: str) -> tuple[DataLoader, DataLoader]:
+def get_dataloaders(dataset_path: Path | str, category: str, batch_size: int) -> tuple[DataLoader, DataLoader]:
     """Get the MVTec LOCO dataloader.
 
     Args:
         dataset_path (Path | str): Path to the dataset.
         category (str): Category of the MVTec dataset.
+        batch_size (int): Batch size for the dataloaders.
 
     Returns:
         tuple[DataLoader, DataLoader]: Tuple of train and test dataloaders.
@@ -98,10 +100,18 @@ def get_dataloaders(dataset_path: Path | str, category: str) -> tuple[DataLoader
         augmentations=Resize((256, 256)),
     )
     train_dataloader = DataLoader(
-        train_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=train_dataset.collate_fn
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        collate_fn=train_dataset.collate_fn,
     )
     test_dataloader = DataLoader(
-        test_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=test_dataset.collate_fn
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        collate_fn=test_dataset.collate_fn,
     )
 
     return train_dataloader, test_dataloader
@@ -269,7 +279,7 @@ def evaluate_submission(
         # Load model once per category
         model = get_model(category)
         # Load data once per category
-        train_dataloader, test_dataloader = get_dataloaders(dataset_path, category)
+        train_dataloader, test_dataloader = get_dataloaders(dataset_path, category, batch_size=model.batch_size)
         train_dataset = cast(MVTecLOCODataset, train_dataloader.dataset)  # Get underlying dataset
 
         for seed in tqdm(seeds, desc=f"Category {category} Seeds", leave=False):
