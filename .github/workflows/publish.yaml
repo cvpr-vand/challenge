@@ -8,6 +8,7 @@ on:
 
 jobs:
   publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: vand2025-runner
     permissions:
       contents: write
@@ -55,11 +56,10 @@ jobs:
           name: evaluation-results
           path: /tmp/merge
       - name: Merge results
-        env:
-          PR_NAME: ${{ github.event.pull_request.title }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_CREATOR: ${{ github.event.pull_request.user.login }}
         run: |
+          PR_NAME=$(cat /tmp/merge/pr_name.txt)
+          PR_NUMBER=$(cat /tmp/merge/pr_number.txt)
+          PR_CREATOR=$(cat /tmp/merge/pr_user.txt)
           # Copy results.csv to the merge directory if it exists
           if [ -f results.csv ]; then
             cp results.csv /tmp/merge/results.csv
@@ -80,11 +80,10 @@ jobs:
           # Copy the saved static files to the gh-pages branch
           cp -r /tmp/static/* .
       - name: Commit results # Renamed from Push New Results
-        env:
-          PR_NAME: ${{ github.event.pull_request.title }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_CREATOR: ${{ github.event.pull_request.user.login }}
         run: |
+          PR_NAME=$(cat /tmp/merge/pr_name.txt)
+          PR_NUMBER=$(cat /tmp/merge/pr_number.txt)
+          PR_CREATOR=$(cat /tmp/merge/pr_user.txt)
           # Commit changes
           git add .
           git commit -m "Add evaluation results for PR \"${PR_NAME}\" (#${PR_NUMBER}) by ${PR_CREATOR}"
@@ -95,19 +94,25 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages
   add-results-comment:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: vand2025-runner
     permissions:
       contents: read
       pull-requests: write
       issues: write
     steps:
+      - name: Download evaluation results
+        uses: actions/download-artifact@v4
+        with:
+          name: evaluation-results
+          path: /tmp/merge
       - name: Add results comment
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const PR_USER_LOGIN = fs.readFileSync('pr_user.txt', 'utf8');
-            const PR_NUMBER = fs.readFileSync('pr_number.txt', 'utf8');
+            const PR_USER_LOGIN = fs.readFileSync('/tmp/merge/pr_user.txt', 'utf8');
+            const PR_NUMBER = fs.readFileSync('/tmp/merge/pr_number.txt', 'utf8');
 
             const fs = require('fs');
             const result = JSON.parse(fs.readFileSync('results.json', 'utf8'));

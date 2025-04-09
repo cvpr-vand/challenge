@@ -39,9 +39,11 @@ jobs:
         env:
           PR_USER: ${{ github.event.pull_request.user.login }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NAME: ${{ github.event.pull_request.title }}
         run: |
           echo $PR_USER > pr_user.txt
           echo $PR_NUMBER > pr_number.txt
+          echo $PR_NAME > pr_name.txt
       - name: Run evaluation
         timeout-minutes: 300 # 5 hours timeout
         run: |
@@ -56,4 +58,5 @@ jobs:
             metrics.csv
             pr_user.txt
             pr_number.txt
+            pr_name.txt
           retention-days: 30
