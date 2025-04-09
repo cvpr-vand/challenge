@@ -2,7 +2,7 @@ name: Publish Results and Comment
 
 on:
   workflow_run:
-    workflows: "Evaluate"
+    workflows: [Evaluation Workflow]
     types:
       - completed
 
