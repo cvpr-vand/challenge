@@ -1,0 +1,140 @@
+name: Publish Results and Comment
+
+on:
+  workflow_run:
+    workflows: "Evaluate"
+    types:
+      - completed
+
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: vand2025-runner
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      max-parallel: 1
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+      - name: Save static files and SHA
+        run: |
+          # Clear temporary directories if they exist
+          rm -rf /tmp/static
+          rm -rf /tmp/merge
+          # Create a temporary directory and copy static files for the leaderboard website
+          mkdir -p /tmp/static
+          cp -r .platform/static/* /tmp/static/
+          # Save the PR SHA
+          echo $(git rev-parse HEAD) > /tmp/pr_sha
+          # Save merger code
+          cp -r .platform/merge /tmp/merge
+      - name: Checkout gh-pages branch
+        run: |
+          # Try to fetch gh-pages branch
+          if ! git fetch origin gh-pages; then
+            # If branch doesn't exist, create an orphan branch
+            git checkout --orphan gh-pages
+            git rm -rf .
+            touch .nojekyll
+            git add .nojekyll
+            git commit -m "Initialize gh-pages branch"
+            # Removed initial push, the action below will handle it.
+          else
+            git checkout gh-pages
+          fi
+      - name: Download evaluation results
+        uses: actions/download-artifact@v4
+        with:
+          name: evaluation-results
+          path: /tmp/merge
+      - name: Merge results
+        run: |
+          PR_NAME=$(cat /tmp/merge/pr_name.txt)
+          PR_NUMBER=$(cat /tmp/merge/pr_number.txt)
+          PR_CREATOR=$(cat /tmp/merge/pr_user.txt)
+          # Copy results.csv to the merge directory if it exists
+          if [ -f results.csv ]; then
+            cp results.csv /tmp/merge/results.csv
+          fi
+          # Run the merge script
+          cd /tmp/merge
+          uv sync
+
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          PR_SHA=$(cat /tmp/pr_sha)
+          # Use environment variables for the uv run command
+          uv run merge --pr_name="${PR_NAME}" --pr_number="${PR_NUMBER}" --pr_author="${PR_CREATOR}" --timestamp="${TIMESTAMP}" --pr_sha="${PR_SHA}"
+
+          # Copy the merged results.csv back to the gh-pages branch
+          cp results.csv /tmp/static/results.csv
+      - name: Copy Static files back to gh-pages
+        run: |
+          # Copy the saved static files to the gh-pages branch
+          cp -r /tmp/static/* .
+      - name: Commit results # Renamed from Push New Results
+        run: |
+          PR_NAME=$(cat /tmp/merge/pr_name.txt)
+          PR_NUMBER=$(cat /tmp/merge/pr_number.txt)
+          PR_CREATOR=$(cat /tmp/merge/pr_user.txt)
+          # Commit changes
+          git add .
+          git commit -m "Add evaluation results for PR \"${PR_NAME}\" (#${PR_NUMBER}) by ${PR_CREATOR}"
+          # Removed git push command
+      - name: Push to gh-pages
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+  add-results-comment:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: vand2025-runner
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Download evaluation results
+        uses: actions/download-artifact@v4
+        with:
+          name: evaluation-results
+          path: /tmp/merge
+      - name: Add results comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const PR_USER_LOGIN = fs.readFileSync('/tmp/merge/pr_user.txt', 'utf8');
+            const PR_NUMBER = fs.readFileSync('/tmp/merge/pr_number.txt', 'utf8');
+
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('results.json', 'utf8'));
+            let result_string = "";
+            for (const [key, value] of Object.entries(result)) {
+              result_string += `${key}: ${value}\n`;
+            }
+            const raw_metrics = fs.readFileSync('metrics.csv', 'utf8');
+            raw_metrics_string = "||seed|k_shot|category|image_score|pixel_score|\n";
+            raw_metrics_string += "|---|---|---|---|---|---|\n";
+            raw_metrics.split('\n').forEach(line => {
+              raw_metrics_string += `|${line.split(',')[0]}|${line.split(',')[1]}|${line.split(',')[2]}|${line.split(',')[3]}|${line.split(',')[4]}|${line.split(',')[5]}|\n`;
+            });
+
+            const comment = `## Evaluation Results
+            ${result_string}
+            ${raw_metrics_string}
+            Created by: ${PR_USER_LOGIN}`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: PR_NUMBER,
+              body: comment
+            });
