@@ -1,7 +1,7 @@
 name: Evaluation Workflow
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize]
     # paths:
     #   - "src/eval/submission/**"
@@ -24,29 +24,33 @@ jobs:
           uvx zizmor .github/workflows/evaluate.yaml
 
   evaluate:
-    needs: security-check # Make this job wait for security-check
+    needs: security-check
     runs-on: vand2025-runner
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
+      pull-requests: read
     steps:
-      - name: Checkout PR code
+      - name: Checkout PR code for evaluation
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           persist-credentials: false
+      - name: Save PR SHA
+        run: echo $(git rev-parse HEAD) > pr_sha.txt
       - name: Run evaluation
         timeout-minutes: 300 # 5 hours timeout
         run: |
           GIT_LFS_SKIP_SMUDGE=1 uv sync
           uv run eval --dataset_path=/home/user/datasets/mvtec_loco
-      - name: Upload evaluation results
+      - name: Upload evaluation results and SHA
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-results
           path: |
             results.json
             metrics.csv
+            pr_sha.txt
           retention-days: 30
 
   publish-results:
@@ -54,97 +58,94 @@ jobs:
     runs-on: vand2025-runner
     permissions:
       contents: write
-      pull-requests: write
+      pull-requests: read
     strategy:
       max-parallel: 1
     steps:
-      - name: Checkout PR code
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-      - name: Save static files and SHA
+      - name: Prepare temporary directories
         run: |
-          # Clear temporary directories if they exist
-          rm -rf /tmp/static
-          rm -rf /tmp/merge
-          # Create a temporary directory and copy static files for the leaderboard website
-          mkdir -p /tmp/static
-          cp -r .platform/static/* /tmp/static/
-          # Save the PR SHA
-          echo $(git rev-parse HEAD) > /tmp/pr_sha
-          # Save merger code
-          cp -r .platform/merge /tmp/merge
-      - name: Checkout gh-pages branch
-        run: |
-          # Try to fetch gh-pages branch
-          if ! git fetch origin gh-pages; then
-            # If branch doesn't exist, create an orphan branch
-            git checkout --orphan gh-pages
-            git rm -rf .
-            touch .nojekyll
-            git add .nojekyll
-            git commit -m "Initialize gh-pages branch"
-            # Removed initial push, the action below will handle it.
-          else
-            git checkout gh-pages
-          fi
-      - name: Download evaluation results
+          rm -rf /tmp/static /tmp/merge
+          mkdir -p /tmp/static /tmp/merge
+      - name: Checkout static files source (base repo)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: base_repo
+      - name: Copy static files for leaderboard
+        run: cp -r base_repo/.platform/static/* /tmp/static/
+      - name: Copy merge script source (base repo)
+        run: cp -r base_repo/.platform/merge/* /tmp/merge/
+      - name: Download evaluation results and SHA
         uses: actions/download-artifact@v4
         with:
           name: evaluation-results
           path: /tmp/merge
+      - name: Checkout gh-pages branch or create if needed
+        run: |
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" --branch gh-pages --single-branch gh_pages_repo || git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" --orphan gh-pages --single-branch gh_pages_repo
+          cd gh_pages_repo
+          if [ ! -f ".nojekyll" ]; then
+            git rm -rf .
+            touch .nojekyll
+            git add .nojekyll
+            git commit -m "Initialize gh-pages branch"
+          fi
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Merge results
         env:
           PR_NAME: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_CREATOR: ${{ github.event.pull_request.user.login }}
         run: |
-          # Copy results.csv to the merge directory if it exists
-          if [ -f results.csv ]; then
-            cp results.csv /tmp/merge/results.csv
+          if [ -f /tmp/merge/results.csv ]; then
+            cp /tmp/merge/results.csv /tmp/merge/results.csv
           fi
-          # Run the merge script
           cd /tmp/merge
           uv sync
 
           TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          PR_SHA=$(cat /tmp/pr_sha)
-          # Use environment variables for the uv run command
+          PR_SHA=$(cat pr_sha.txt)
           uv run merge --pr_name="${PR_NAME}" --pr_number="${PR_NUMBER}" --pr_author="${PR_CREATOR}" --timestamp="${TIMESTAMP}" --pr_sha="${PR_SHA}"
 
-          # Copy the merged results.csv back to the gh-pages branch
-          cp results.csv /tmp/static/results.csv
-      - name: Copy Static files back to gh-pages
+          cp results.csv ../gh_pages_repo/results.csv
+      - name: Copy Static files back to gh-pages checkout
         run: |
-          # Copy the saved static files to the gh-pages branch
-          cp -r /tmp/static/* .
-      - name: Commit results # Renamed from Push New Results
+          cp -r /tmp/static/* gh_pages_repo/
+      - name: Commit and Push results to gh-pages
         env:
           PR_NAME: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_CREATOR: ${{ github.event.pull_request.user.login }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Commit changes
+          cd gh_pages_repo
           git add .
-          git commit -m "Add evaluation results for PR \"${PR_NAME}\" (#${PR_NUMBER}) by ${PR_CREATOR}"
-          # Removed git push command
-      - name: Push to gh-pages
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: gh-pages
+          if git diff --staged --quiet; then
+            echo "No changes to commit to gh-pages."
+          else
+            git commit -m "Add evaluation results for PR \"${PR_NAME}\" (#${PR_NUMBER}) by ${PR_CREATOR}"
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" HEAD:gh-pages
+          fi
 
   add-results-comment:
     needs: evaluate
     runs-on: vand2025-runner
     permissions:
+      contents: read
       pull-requests: write
-      contents: write
+      issues: write
     steps:
+      - name: Checkout base code (optional, for context if needed)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Download evaluation results
         uses: actions/download-artifact@v4
         with:
