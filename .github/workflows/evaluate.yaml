@@ -3,8 +3,8 @@ name: Evaluation Workflow
 on:
   pull_request:
     types: [opened, synchronize]
-    paths:
-      - "src/eval/submission/**"
+    # paths:
+    #   - "src/eval/submission/**"
   workflow_dispatch: # manually trigger the workflow
 
 jobs:
