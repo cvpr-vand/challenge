@@ -2,7 +2,7 @@ name: Publish Results and Comment
 
 on:
   workflow_run:
-    workflows: [Evaluation Workflow]
+    workflows: ["Evaluation Workflow"]
     types:
       - completed
 
@@ -111,10 +111,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const fs = require('fs');
             const PR_USER_LOGIN = fs.readFileSync('/tmp/merge/pr_user.txt', 'utf8');
             const PR_NUMBER = fs.readFileSync('/tmp/merge/pr_number.txt', 'utf8');
 
-            const fs = require('fs');
             const result = JSON.parse(fs.readFileSync('results.json', 'utf8'));
             let result_string = "";
             for (const [key, value] of Object.entries(result)) {
