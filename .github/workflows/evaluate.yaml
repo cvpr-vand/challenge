@@ -131,8 +131,6 @@ jobs:
           PR_NAME: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_CREATOR: ${{ github.event.pull_request.user.login }}
-          PR_SHA: $(cat /tmp/pr_sha)
-          TIMESTAMP: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
         run: |
           # Copy results.csv to the merge directory if it exists
           if [ -f results.csv ]; then
@@ -142,6 +140,8 @@ jobs:
           cd /tmp/merge
           uv sync
 
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          PR_SHA=$(cat /tmp/pr_sha)
           # Use environment variables for the uv run command
           uv run merge --pr_name="${PR_NAME}" --pr_number="${PR_NUMBER}" --pr_author="${PR_CREATOR}" --timestamp="${TIMESTAMP}" --pr_sha="${PR_SHA}"
 
