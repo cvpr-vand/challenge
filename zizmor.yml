@@ -1,0 +1,5 @@
+rules:
+  dangerous-triggers:
+    ignore:
+      - evaluate.yaml:3
+      - publish.yaml:3
