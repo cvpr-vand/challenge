@@ -24,145 +24,39 @@ jobs:
           uvx zizmor .github/workflows/evaluate.yaml
 
   evaluate:
-    needs: security-check # Make this job wait for security-check
+    needs: security-check
     runs-on: vand2025-runner
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
+      pull-requests: read
     steps:
-      - name: Checkout PR code
+      - name: Checkout PR code for evaluation
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           persist-credentials: false
+      - name: Save PR User and Number
+        env:
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NAME: ${{ github.event.pull_request.title }}
+        run: |
+          echo $PR_USER > pr_user.txt
+          echo $PR_NUMBER > pr_number.txt
+          echo $PR_NAME > pr_name.txt
       - name: Run evaluation
         timeout-minutes: 300 # 5 hours timeout
         run: |
           GIT_LFS_SKIP_SMUDGE=1 uv sync
           uv run eval --dataset_path=/home/user/datasets/mvtec_loco
-      - name: Upload evaluation results
+      - name: Upload evaluation results and SHA
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-results
-          path: results.json
+          path: |
+            results.json
+            metrics.csv
+            pr_user.txt
+            pr_number.txt
+            pr_name.txt
           retention-days: 30
-      - name: Add results comment
-        uses: actions/github-script@v7
-        env:
-          PR_USER_LOGIN: ${{ github.event.pull_request.user.login }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const result = JSON.parse(fs.readFileSync('results.json', 'utf8'));
-            let result_string = "";
-            for (const [key, value] of Object.entries(result)) {
-              result_string += `${key}: ${value}\n`;
-            }
-            const raw_metrics = fs.readFileSync('metrics.csv', 'utf8');
-            raw_metrics_string = "||seed|k_shot|category|image_score|pixel_score|\n";
-            raw_metrics_string += "|---|---|---|---|---|---|\n";
-            raw_metrics.split('\n').forEach(line => {
-              raw_metrics_string += `|${line.split(',')[0]}|${line.split(',')[1]}|${line.split(',')[2]}|${line.split(',')[3]}|${line.split(',')[4]}|${line.split(',')[5]}|\n`;
-            });
-
-            const comment = `## Evaluation Results
-            ${result_string}
-            ${raw_metrics_string}
-            Created by: ${process.env.PR_USER_LOGIN}`;
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: comment
-            });
-
-  publish-results:
-    needs: evaluate
-    runs-on: vand2025-runner
-    permissions:
-      contents: write
-      pull-requests: write
-    strategy:
-      max-parallel: 1
-    steps:
-      - name: Checkout PR code
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Configure Git
-        run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
-      - name: Save static files and SHA
-        run: |
-          # Clear temporary directories if they exist
-          rm -rf /tmp/static
-          rm -rf /tmp/merge
-          # Create a temporary directory and copy static files for the leaderboard website
-          mkdir -p /tmp/static
-          cp -r .platform/static/* /tmp/static/
-          # Save the PR SHA
-          echo $(git rev-parse HEAD) > /tmp/pr_sha
-          # Save merger code
-          cp -r .platform/merge /tmp/merge
-      - name: Checkout gh-pages branch
-        run: |
-          # Try to fetch gh-pages branch
-          if ! git fetch origin gh-pages; then
-            # If branch doesn't exist, create an orphan branch
-            git checkout --orphan gh-pages
-            git rm -rf .
-            touch .nojekyll
-            git add .nojekyll
-            git commit -m "Initialize gh-pages branch"
-            # Removed initial push, the action below will handle it.
-          else
-            git checkout gh-pages
-          fi
-      - name: Download evaluation results
-        uses: actions/download-artifact@v4
-        with:
-          name: evaluation-results
-          path: /tmp/merge
-      - name: Merge results
-        env:
-          PR_NAME: ${{ github.event.pull_request.title }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_CREATOR: ${{ github.event.pull_request.user.login }}
-        run: |
-          # Copy results.csv to the merge directory if it exists
-          if [ -f results.csv ]; then
-            cp results.csv /tmp/merge/results.csv
-          fi
-          # Run the merge script
-          cd /tmp/merge
-          uv sync
-
-          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          PR_SHA=$(cat /tmp/pr_sha)
-          # Use environment variables for the uv run command
-          uv run merge --pr_name="${PR_NAME}" --pr_number="${PR_NUMBER}" --pr_author="${PR_CREATOR}" --timestamp="${TIMESTAMP}" --pr_sha="${PR_SHA}"
-
-          # Copy the merged results.csv back to the gh-pages branch
-          cp results.csv /tmp/static/results.csv
-      - name: Copy Static files back to gh-pages
-        run: |
-          # Copy the saved static files to the gh-pages branch
-          cp -r /tmp/static/* .
-      - name: Commit results # Renamed from Push New Results
-        env:
-          PR_NAME: ${{ github.event.pull_request.title }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_CREATOR: ${{ github.event.pull_request.user.login }}
-        run: |
-          # Commit changes
-          git add .
-          git commit -m "Add evaluation results for PR \"${PR_NAME}\" (#${PR_NUMBER}) by ${PR_CREATOR}"
-          # Removed git push command
-      - name: Push to gh-pages
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: gh-pages
