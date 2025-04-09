@@ -36,9 +36,12 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           persist-credentials: false
       - name: Save PR User and Number
+        env:
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          echo ${{ github.event.pull_request.user.login }} > pr_user.txt
-          echo ${{ github.event.pull_request.number }} > pr_number.txt
+          echo $PR_USER > pr_user.txt
+          echo $PR_NUMBER > pr_number.txt
       - name: Run evaluation
         timeout-minutes: 300 # 5 hours timeout
         run: |
