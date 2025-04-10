@@ -1,5 +1,5 @@
 aufc,normalized_aufc,avg_image_score,pr_name,pr_number,pr_author,timestamp,pr_sha
 7.0,1.0,1.0,Alternate Folder structure,3.0,ashwinvaidya17,"$(date -u +""%Y-%m-%dT%H:%M:%SZ"")",$(cat /tmp/pr_sha)
-5.463604994614919,0.7805149992307026,0.7804300347963969,Add sample submission,8.0,ashwinvaidya17,2025-04-10T12:03:22Z,3d47ab2f877593b94f1a1baad97135e173ce1c55
+,,,,,,,
 ,,,,,,,
 ,,,,,,,
