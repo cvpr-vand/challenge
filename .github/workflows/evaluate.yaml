@@ -33,6 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
+          branch: ${{ github.event.pull_request.head.ref }}
           persist-credentials: false
       - name: Save PR User and Number
         env:
@@ -169,12 +170,12 @@ jobs:
             const PR_USER_LOGIN = fs.readFileSync('/tmp/merge/pr_user.txt', 'utf8');
             const PR_NUMBER = fs.readFileSync('/tmp/merge/pr_number.txt', 'utf8');
 
-            const result = JSON.parse(fs.readFileSync('results.json', 'utf8'));
+            const result = JSON.parse(fs.readFileSync('/tmp/merge/results.json', 'utf8'));
             let result_string = "";
             for (const [key, value] of Object.entries(result)) {
               result_string += `${key}: ${value}\n`;
             }
-            const raw_metrics = fs.readFileSync('metrics.csv', 'utf8');
+            const raw_metrics = fs.readFileSync('/tmp/merge/metrics.csv', 'utf8');
             raw_metrics_string = "||seed|k_shot|category|image_score|pixel_score|\n";
             raw_metrics_string += "|---|---|---|---|---|---|\n";
             raw_metrics.split('\n').forEach(line => {
