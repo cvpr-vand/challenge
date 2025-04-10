@@ -1,5 +1,0 @@
-aufc,normalized_aufc,avg_image_score,pr_name,pr_number,pr_author,timestamp,pr_sha
-7.0,1.0,1.0,Alternate Folder structure,3.0,ashwinvaidya17,"$(date -u +""%Y-%m-%dT%H:%M:%SZ"")",$(cat /tmp/pr_sha)
-,,,,,,,
-,,,,,,,
-,,,,,,,
