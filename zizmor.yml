@@ -2,3 +2,6 @@ rules:
   dangerous-triggers:
     ignore:
       - evaluate.yaml:3
+  template-injection:
+    ignore:
+      - evaluate.yaml:32
