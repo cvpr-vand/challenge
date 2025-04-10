@@ -164,7 +164,7 @@ def get_model(
 
     return model.to(DEVICE)
 
-@auto_batch_size()
+@auto_batch_size(max_batch_size=128)
 def compute_kshot_metrics(
     dataset_path,
     category,
