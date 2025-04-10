@@ -19,18 +19,14 @@ def main(pr_name: str, pr_number: int, pr_author: str, timestamp: str, pr_sha: s
         df = pd.DataFrame(results, index=[0])
     else:
         df = pd.read_csv("results.csv")
-        existing_entry = df.query(
-            f"pr_author == '{pr_author}' and pr_number == {pr_number}"
-        )
+        existing_entry = df.query(f"pr_author == '{pr_author}' and pr_number == {pr_number}")
         if existing_entry.empty:
             df = pd.concat([df, pd.DataFrame([results])], ignore_index=True)
         else:
-            df.loc[existing_entry.index, :] = pd.DataFrame([results])
+            df.loc[existing_entry.index[0], :] = pd.Series(results)
 
     # Sort by avg_image_score then by normalized_aufc, and then aufc in descending order
-    df = df.sort_values(
-        by=["avg_image_score", "normalized_aufc", "aufc"], ascending=False
-    )
+    df = df.sort_values(by=["avg_image_score", "normalized_aufc", "aufc"], ascending=False)
     df.to_csv("results.csv", index=False)
 
 
