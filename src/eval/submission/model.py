@@ -26,12 +26,6 @@ class Model(nn.Module):
         # TODO: Implement this if you want to download the weights from a URL
         return None
 
-    @property
-    def batch_size(self) -> int:
-        """Batch size of the model."""
-        # TODO: Reduce the batch size in case your model is too large to fit in memory.
-        return 32
-
     def forward(self, image: torch.Tensor) -> ImageBatch:
         """Forward pass of the model.
 
