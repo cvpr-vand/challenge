@@ -20,6 +20,7 @@ from torchvision.transforms.v2 import Resize
 from tqdm import tqdm
 
 from eval.submission.model import Model
+from eval.utils import auto_batch_size
 
 CATEGORIES = [
     "breakfast_box",
@@ -163,13 +164,14 @@ def get_model(
 
     return model.to(DEVICE)
 
-
+@auto_batch_size(max_batch_size=128)
 def compute_kshot_metrics(
-    train_dataset: MVTecLOCODataset,
-    test_dataloader: DataLoader,
+    dataset_path,
+    category,
     model: nn.Module,
     k_shot: int,
     seed: int,
+    batch_size: int | None = None,
 ) -> dict[str, float]:
     """Compute metrics for a specific k-shot setting.
 
@@ -183,6 +185,9 @@ def compute_kshot_metrics(
     Returns:
         dict[str, float]: Computed metrics for this k-shot setting.
     """
+    train_dataloader, test_dataloader = get_dataloaders(dataset_path, category, batch_size=batch_size)
+    train_dataset = cast(MVTecLOCODataset, train_dataloader.dataset)  # Get underlying dataset)
+
     image_metric = _F1Max().to(DEVICE)
 
     # Sample k_shot images from the training set deterministically
@@ -271,26 +276,27 @@ def evaluate_submission(
     Returns:
         dict[str, float]: Final averaged metrics.
     """
+
     metrics = []
     print(f"Using device: {DEVICE}")
+
+    # create dictso that we only compute batch size once per k_shot
+    batch_size_dict = {k_shot: None for k_shot in k_shots}
 
     for category in tqdm(CATEGORIES, desc="Processing Categories"):
         # --- Per-Category Setup ---
         # Load model once per category
         model = get_model(category)
-        # Load data once per category
-        train_dataloader, test_dataloader = get_dataloaders(dataset_path, category, batch_size=model.batch_size)
-        train_dataset = cast(MVTecLOCODataset, train_dataloader.dataset)  # Get underlying dataset
-
         for seed in tqdm(seeds, desc=f"Category {category} Seeds", leave=False):
             for k_shot in k_shots:  # No tqdm here, handled in compute_kshot_metrics
                 # Compute metrics for this specific seed/category/k-shot combination
-                k_shot_metrics = compute_kshot_metrics(
-                    train_dataset=train_dataset,
-                    test_dataloader=test_dataloader,
+                k_shot_metrics, batch_size = compute_kshot_metrics(
+                    dataset_path,
+                    category,
                     model=model,
                     k_shot=k_shot,
                     seed=seed,
+                    batch_size=batch_size_dict[k_shot],
                 )
 
                 # Append results
@@ -302,6 +308,9 @@ def evaluate_submission(
                         "image_score": k_shot_metrics["image_score"],
                     }
                 )
+
+                # update batch size dict
+                batch_size_dict[k_shot] = batch_size
 
     final_average_metrics = compute_average_metrics(metrics)
     print("Final Average Metrics Across All Seeds:", final_average_metrics)
