@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=7 uv run eval --k_shots 1 2 4 8 --seeds 42 0 1234 --dataset_path /mnt/guzhaopeng/data/mvtec_loco
