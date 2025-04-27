@@ -5,18 +5,13 @@ description = "VAND 2025 evaluation script"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "cython==0.29.36",
     "anomalib[full]",
     "scikit-learn",
     # TODO: Add your additional dependencies here
-    "wget==3.2",
-    "pydensecrf",
-    "setuptools>=76.1.0",
 ]
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
-pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git", branch = "main"}
 
 
 [tool.hatch.build.targets.wheel]
