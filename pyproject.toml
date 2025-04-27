@@ -6,12 +6,15 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "anomalib[full]",
+    "pydensecrf",
     "scikit-learn",
     # TODO: Add your additional dependencies here
+    "wget==3.2",
 ]
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
+pydensecrf = { path = "tool/pydensecrf-master" }
 
 
 [tool.hatch.build.targets.wheel]
