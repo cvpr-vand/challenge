@@ -783,6 +783,24 @@ wheels = [
 ]
 
 [[package]]
+name = "cython"
+version = "0.29.36"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/db/df0e99d6c5fe19ee5c981d22aad557be4bdeed3ecfae25d47b84b07f0f98/Cython-0.29.36.tar.gz", hash = "sha256:41c0cfd2d754e383c9eeb95effc9aa4ab847d0c9747077ddd7c0dcb68c3bc01f", size = 2097760, upload_time = "2023-07-04T19:24:05.704Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/93/a3a183e87a6f9442bd05adc84282d4b156b1246310f9a15729c4783640eb/Cython-0.29.36-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_24_aarch64.whl", hash = "sha256:7cb44aeaf6c5c25bd6a7562ece4eadf50d606fc9b5f624fa95bd0281e8bf0a97", size = 1809586, upload_time = "2023-07-10T16:03:23.63Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/26/ca0f1bb049b83c25cafa39f3fa5287c826a6ab36e665c906209e07f4deac/Cython-0.29.36-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_24_x86_64.whl", hash = "sha256:28fb10aabd56a2e4d399273b48e106abe5a0d271728fd5eed3d36e7171000045", size = 1912066, upload_time = "2023-07-10T16:03:26.298Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/a5/67c7baec8a52ce086f9bebf5ad1ce13eccde3aa90361c220a6e0dde355be/Cython-0.29.36-cp310-cp310-manylinux_2_5_i686.manylinux1_i686.manylinux_2_24_i686.whl", hash = "sha256:86b7a13c6b23ab6471d40a320f573fbc8a4e39833947eebed96661145dc34771", size = 1912687, upload_time = "2023-07-10T16:03:29.064Z" },
+    { url = "https://files.pythonhosted.org/packages/22/20/213fa7a49c346174d46e3c9f20d652374107e3dd8fe608700464103c16bb/Cython-0.29.36-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:19ccf7fc527cf556e2e6a3dfeffcadfbcabd24a59a988289117795dfed8a25ad", size = 2007906, upload_time = "2023-07-10T16:03:31.821Z" },
+    { url = "https://files.pythonhosted.org/packages/05/6a/bdc0773eeeab3e85b1adfd42cf95c325d024b919c9e1e0db75c82cc7bfc0/Cython-0.29.36-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_24_aarch64.whl", hash = "sha256:74bddfc7dc8958526b2018d3adc1aa6dc9cf2a24095c972e5ad06758c360b261", size = 1809032, upload_time = "2023-07-10T16:03:34.576Z" },
+    { url = "https://files.pythonhosted.org/packages/43/c9/4c8a84731c0948b408d059c2c17c95cbb8b9c2baefe1c6985c0b29a9055e/Cython-0.29.36-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_24_x86_64.whl", hash = "sha256:6c4d7e36fe0211e394adffd296382b435ac22762d14f2fe45c506c230f91cf2d", size = 1911033, upload_time = "2023-07-10T16:03:37.329Z" },
+    { url = "https://files.pythonhosted.org/packages/25/5b/e8ec3ffc79a91e11af67bd7a9e4616966214fc2fd694c526a38b94a25ae4/Cython-0.29.36-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_24_i686.whl", hash = "sha256:0bca6a7504e8cfc63a4d3c7c9b9a04e5d05501942a6c8cee177363b61a32c2d4", size = 1911183, upload_time = "2023-07-10T16:03:40.34Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/a3/43bf5b3ba528a8fa2aa25dd48317e493b46ce838098605277b9efc7a0c1a/Cython-0.29.36-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:17c74f80b06e2fa8ffc8acd41925f4f9922da8a219cd25c6901beab2f7c56cc5", size = 2007074, upload_time = "2023-07-10T16:03:43.152Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/36/62cec550b0812b290e19bcbb632d8445ac2bed858303f313f1fd6d3e2ea8/Cython-0.29.36-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:25ff471a459aad82146973b0b8c177175ab896051080713d3035ad4418739f66", size = 1951387, upload_time = "2023-07-10T16:03:46.374Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/d6/9eed523aeaca42acbaa3e6d3850edae780dc7f8da9df1bf6a2ceb851839c/Cython-0.29.36-py2.py3-none-any.whl", hash = "sha256:95bb13d8be507425d03ebe051f90d4b2a9fdccc64e4f30b35645fdb7542742eb", size = 988293, upload_time = "2023-07-04T19:24:01.262Z" },
+]
+
+[[package]]
 name = "databricks-sdk"
 version = "0.49.0"
 source = { registry = "https://pypi.org/simple" }
@@ -5181,6 +5199,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anomalib", extra = ["full"] },
+    { name = "cython" },
     { name = "pydensecrf" },
     { name = "scikit-learn" },
     { name = "wget" },
@@ -5189,6 +5208,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anomalib", extras = ["full"], git = "https://github.com/openvinotoolkit/anomalib.git?branch=main" },
+    { name = "cython", specifier = "==0.29.36" },
     { name = "pydensecrf", directory = "tool/pydensecrf-master" },
     { name = "scikit-learn" },
     { name = "wget", specifier = "==3.2" },
