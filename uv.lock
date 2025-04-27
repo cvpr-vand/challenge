@@ -5202,6 +5202,7 @@ dependencies = [
     { name = "cython" },
     { name = "pydensecrf" },
     { name = "scikit-learn" },
+    { name = "setuptools" },
     { name = "wget" },
 ]
 
@@ -5211,6 +5212,7 @@ requires-dist = [
     { name = "cython", specifier = "==0.29.36" },
     { name = "pydensecrf", directory = "tool/pydensecrf-master" },
     { name = "scikit-learn" },
+    { name = "setuptools", specifier = ">=76.1.0" },
     { name = "wget", specifier = "==3.2" },
 ]
 

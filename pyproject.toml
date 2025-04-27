@@ -5,12 +5,13 @@ description = "VAND 2025 evaluation script"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "anomalib[full]",
     "cython==0.29.36",
-    "pydensecrf",
+    "anomalib[full]",
     "scikit-learn",
     # TODO: Add your additional dependencies here
     "wget==3.2",
+    "pydensecrf",
+    "setuptools>=76.1.0",
 ]
 
 [tool.uv.sources]
