@@ -3649,6 +3649,11 @@ wheels = [
 ]
 
 [[package]]
+name = "pydensecrf"
+version = "1.0"
+source = { directory = "tool/pydensecrf-master" }
+
+[[package]]
 name = "pydot"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -5176,6 +5181,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anomalib", extra = ["full"] },
+    { name = "pydensecrf" },
     { name = "scikit-learn" },
     { name = "wget" },
 ]
@@ -5183,6 +5189,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anomalib", extras = ["full"], git = "https://github.com/openvinotoolkit/anomalib.git?branch=main" },
+    { name = "pydensecrf", directory = "tool/pydensecrf-master" },
     { name = "scikit-learn" },
     { name = "wget", specifier = "==3.2" },
 ]
