@@ -8,7 +8,7 @@ import numpy as np
 import torch.multiprocessing
 import torch.nn as nn
 import torch.nn.functional as F
-import wget
+#import wget
 from PIL import Image
 from scipy.optimize import linear_sum_assignment
 # from torch._six import string_classes

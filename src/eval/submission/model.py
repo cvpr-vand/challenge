@@ -613,7 +613,6 @@ class Model(nn.Module):
         # TODO: Implement this if you want to download the weights from a URL
         return None
 
-
     def forward(self, image: torch.Tensor) -> ImageBatch:
         """Forward pass of the model.
 
