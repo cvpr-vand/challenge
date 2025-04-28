@@ -8,8 +8,7 @@ dependencies = [
     "anomalib[full]",
     "pydensecrf",
     "scikit-learn",
-    # TODO: Add your additional dependencies here
-    "setuptools==69.5.0",
+    "setuptools==76.1.0",
 ]
 
 [tool.uv.sources]
