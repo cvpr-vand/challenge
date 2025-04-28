@@ -3804,9 +3804,8 @@ wheels = [
 
 [[package]]
 name = "pydensecrf"
-version = "1.0rc3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/31/5a/1c2ab48e8019d282c128bc5c621332267bb954d32eecdda3ba57306b1551/pydensecrf-1.0rc3.tar.gz", hash = "sha256:08be1603af2bede05c7697b6018e8e3059de7cc181e4e784b334889dcc749aa5", size = 1036569, upload_time = "2018-04-01T22:52:22.567Z" }
+version = "1.0"
+source = { directory = "tool/pydensecrf-master" }
 
 [[package]]
 name = "pydot"
@@ -5425,7 +5424,7 @@ requires-dist = [
     { name = "editables", specifier = ">=0.5" },
     { name = "eigen", specifier = ">=0.1.1" },
     { name = "hatchling", specifier = ">=1.27.0" },
-    { name = "pydensecrf", specifier = ">=1.0rc3" },
+    { name = "pydensecrf", directory = "tool/pydensecrf-master" },
     { name = "scikit-learn" },
     { name = "setuptools", specifier = "==76.1.0" },
 ]
