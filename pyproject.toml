@@ -23,8 +23,8 @@ packages = ["src/eval"]
 eval = "eval.evaluate:eval"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 line-length = 120
