@@ -29,6 +29,9 @@ eval = "eval.evaluate:eval"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.uv]
+no-build-isolation-package = ["pydensecrf"]
+
 [tool.ruff]
 line-length = 120
 
