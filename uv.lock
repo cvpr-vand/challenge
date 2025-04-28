@@ -4532,11 +4532,11 @@ wheels = [
 
 [[package]]
 name = "setuptools"
-version = "63.4.0"
+version = "69.5.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/48/b7/92671fba6952de2f0240e6a3251bf9674b2ed0cc6e3d5f756d753404ee15/setuptools-63.4.0.tar.gz", hash = "sha256:d36f579e989a90e8106b9061599c707d912e9cd296b30d62cb6b4dd3567a5ddc", size = 2598363, upload_time = "2022-08-03T03:04:23.012Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/6c/a1e240d85b63e04b2f6786a39e32ea78ad9ec7a9e8193b5510b63b5add94/setuptools-69.5.0.tar.gz", hash = "sha256:8d881f842bfc0e29e93bc98a2e650e8845609adff4d2989ba6c748e67b09d5be", size = 2291066, upload_time = "2024-04-13T13:36:46.951Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/c6/1ffbdc6b831ff295a4d6371c87786f254a5283cd4015b6844c28efc136cc/setuptools-63.4.0-py3-none-any.whl", hash = "sha256:db49784825568c9340e45e3322b8b8aed4ca598ce9bbf5277dcae95cc04dc469", size = 1228715, upload_time = "2022-08-03T03:04:21.138Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/dd/5be5c6958d2d8fccf26b0274303f2c960a0eba88b84980e71e6f795cdd87/setuptools-69.5.0-py3-none-any.whl", hash = "sha256:3b2dbd8f63dcc6b7c327d0243c2d7dc8c96cc507c016f09221f3787e6e528719", size = 893674, upload_time = "2024-04-13T13:36:43.117Z" },
 ]
 
 [[package]]
@@ -5191,7 +5191,7 @@ requires-dist = [
     { name = "anomalib", extras = ["full"], git = "https://github.com/openvinotoolkit/anomalib.git?branch=main" },
     { name = "pydensecrf", git = "https://github.com/lucasb-eyer/pydensecrf.git" },
     { name = "scikit-learn" },
-    { name = "setuptools", specifier = "==63.4.0" },
+    { name = "setuptools", specifier = "==69.5.0" },
 ]
 
 [[package]]
