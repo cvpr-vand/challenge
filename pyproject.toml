@@ -27,13 +27,13 @@ packages = ["src/eval"]
 eval = "eval.evaluate:eval"
 
 [build-system]
-#requires = ["hatchling"]
-#build-backend = "hatchling.build"
-requires = ["setuptools", "wheel", "cython==0.29.36"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+#requires = ["setuptools", "wheel", "cython==0.29.36"]
+#build-backend = "setuptools.build_meta"
 
 [tool.uv]
-no-build-isolation-package = ["setuptools","pydensecrf"]
+no-build-isolation-package = ["pydensecrf"]
 
 [tool.ruff]
 line-length = 120
