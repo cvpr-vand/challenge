@@ -1,5 +1,0 @@
-include pydensecrf/eigen.pxd
-include pydensecrf/eigen.pyx
-include pydensecrf/densecrf.pxd
-include pydensecrf/densecrf.pyx
-recursive-include pydensecrf/densecrf *
