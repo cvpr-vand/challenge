@@ -10,14 +10,15 @@ dependencies = [
     "editables>=0.5",
     "eigen>=0.1.1",
     "hatchling>=1.27.0",
-    "pydensecrf>=1.0rc3",
+    "pydensecrf==1.0rc3",
     "scikit-learn",
     "setuptools==76.1.0",
 ]
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
-pydensecrf = { path = "tool/pydensecrf-master"}
+pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git", branch = "main" }
+#pydensecrf = { path = "tool/pydensecrf-master"}
 
 
 [tool.hatch.build.targets.wheel]
