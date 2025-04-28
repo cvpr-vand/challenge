@@ -3649,9 +3649,10 @@ wheels = [
 ]
 
 [[package]]
-name = "pydensecrf"
-version = "1.0"
-source = { git = "https://github.com/lucasb-eyer/pydensecrf.git#2723c7fa4f2ead16ae1ce3d8afe977724bb8f87f" }
+name = "pydensecrf2"
+version = "1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/b1/5be08a234d19580411a1f3f0d10363442ad8a83c35f39e59c99a33f1eb2b/pydensecrf2-1.1.tar.gz", hash = "sha256:c39b0b544e74256fade1a294db9df39ee408b07ac398cd96036f37ed19843139", size = 1468587, upload_time = "2024-12-23T12:56:29.891Z" }
 
 [[package]]
 name = "pydot"
@@ -5181,7 +5182,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anomalib", extra = ["full"] },
-    { name = "pydensecrf" },
+    { name = "pydensecrf2" },
     { name = "scikit-learn" },
     { name = "setuptools" },
 ]
@@ -5189,7 +5190,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anomalib", extras = ["full"], git = "https://github.com/openvinotoolkit/anomalib.git?branch=main" },
-    { name = "pydensecrf", git = "https://github.com/lucasb-eyer/pydensecrf.git" },
+    { name = "pydensecrf2", specifier = ">=1.1" },
     { name = "scikit-learn" },
     { name = "setuptools", specifier = "==76.1.0" },
 ]
