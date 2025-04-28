@@ -9,6 +9,7 @@ dependencies = [
     "pydensecrf",
     "scikit-learn",
     # TODO: Add your additional dependencies here
+    "setuptools==63.4.0",
 ]
 
 [tool.uv.sources]
