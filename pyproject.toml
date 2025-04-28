@@ -33,6 +33,7 @@ build-backend = "hatchling.build"
 #build-backend = "setuptools.build_meta"
 
 [tool.uv]
+build-constraint-dependence = ["setuptools"]
 no-build-isolation-package = ["pydensecrf"]
 
 [tool.ruff]
