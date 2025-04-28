@@ -17,7 +17,7 @@ dependencies = [
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
-pydensecrf = { path = "tool/pydensecrf-master"}
+pydensecrf = { path = "tool/pydensecrf-1.0rc3"}
 
 
 [tool.hatch.build.targets.wheel]
