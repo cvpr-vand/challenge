@@ -12,9 +12,6 @@ dependencies = [
     "setuptools==69.5.0",
 ]
 
-[tool.uv]
-no-build-isolation = true
-
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
 pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git" }
@@ -38,4 +35,7 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["eval"]
+
+[tool.uv]
+no-build-isolation-package = ["pydensecrf"]
 
