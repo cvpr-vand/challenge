@@ -35,6 +35,4 @@ select = ["E", "F", "W", "I"]
 [tool.ruff.lint.isort]
 known-first-party = ["eval"]
 
-[tool.uv]
-no-build-isolation-package = ["pydensecrf"]
 
