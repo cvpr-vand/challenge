@@ -6,15 +6,16 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "anomalib[full]",
-    "cython==3.0.2",
-    "pydensecrf",
+    "cython==0.29.36",
+    "editables>=0.5",
+    "hatchling>=1.27.0",
+    "pydensecrf>=1.0rc3",
     "scikit-learn",
     "setuptools==76.1.0",
 ]
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
-pydensecrf = { path = "tool/pydensecrf-master" }
 
 
 [tool.hatch.build.targets.wheel]
@@ -24,8 +25,8 @@ packages = ["src/eval"]
 eval = "eval.evaluate:eval"
 
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 120
