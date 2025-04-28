@@ -27,7 +27,7 @@ packages = ["src/eval"]
 eval = "eval.evaluate:eval"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "setuptools", "wheel", "cython==0.29.36"]
 build-backend = "hatchling.build"
 #requires = ["setuptools", "wheel", "cython==0.29.36"]
 #build-backend = "setuptools.build_meta"
