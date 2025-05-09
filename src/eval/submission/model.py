@@ -636,8 +636,6 @@ class Model(nn.Module):
         # TODO: Implement the forward pass of the model.
 
         batch = image
-        import pdb
-        pdb.set_trace()
         if self.class_name == "screw_bag":
             batch = rotate(batch, 3, interpolation=InterpolationMode.BILINEAR)
             batch = crop(batch, 35, 23, 180, 175)
@@ -986,32 +984,32 @@ class Model(nn.Module):
         if self.class_name == "juice_bottle":
             pred_score = torch.tensor((10 * anomaly_map_ret.max().item()
                                        + 5 * anomaly_map_ret_dino.max().item())
-                                      # + 25 * global_score  
-                                      + 20 * logits[0, 0, 1].item())
+                                       + 25 * global_score  
+                                       + 20 * logits[0, 0, 1].item())
         elif self.class_name == "pushpins":
             pred_score = torch.tensor((10 * anomaly_map_ret.max().item())
-                                     # + 5 * global_score
-                                      + (50 * score_test_all))
+                                       + 5 * global_score
+                                       + (50 * score_test_all))
         elif self.class_name == "screw_bag":
             pred_score = torch.tensor((10 * anomaly_map_ret.max().item()
                                        + 20 * anomaly_map_ret_dino.max().item())
-                                      # + 10 * global_score
+                                       + 10 * global_score
                                        + (1 * score_test_all + 100 * dists_multi_layers.mean().item() + 5 * dists_multi_layers_dino.mean().item() ))
         elif self.class_name == "splicing_connectors":
             pred_score = torch.tensor(( 10 * anomaly_map_ret.max().item()
                                         + 10 * anomaly_map_ret_dino.max().item())
-                                       # + 30 * global_score
+                                        + 30 * global_score
                                         + 1 * logits[0, 0, 1].item()
                                         + ( 5 * dists_multi_layers.mean().item()
                                         + 1 * dists_multi_layers_dino.mean().item()
                                         + 1 * anomaly_map_ret_part.max().item()))
         else:  # "breakfast_box"
             pred_score = torch.tensor((10 * anomaly_map_ret.max().item()
-                                       #+ 30 * anomaly_map_ret_dino.max().item())
-                                       #+ 30 * global_score
+                                       + 30 * anomaly_map_ret_dino.max().item())
+                                       + 30 * global_score
                                        + 1 * logits[0, 0, 1].item()
-                                       #+ (200 * dists_multi_layers.max().item()
-                                       #+ 100 * dists_multi_layers_dino.max().item()
+                                       + (200 * dists_multi_layers.max().item()
+                                       + 100 * dists_multi_layers_dino.max().item()
                                        + 10 * anomaly_map_ret_part.max().item() ))
 
         pred_score = pred_score.to(self.device)
