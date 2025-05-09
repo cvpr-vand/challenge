@@ -11,15 +11,15 @@ from torchvision.transforms.v2.functional import resize, crop, rotate, Interpola
 import torch.nn.functional as F
 from sklearn.cluster import KMeans
 import cv2
-from submission.module.modules import DinoFeaturizer, PromptLearner, Adapter, TextEncoder, LinearLayer_fc
+from eval.submission.module.modules import DinoFeaturizer, PromptLearner, Adapter, TextEncoder, LinearLayer_fc
 import glob
 
-from submission.utils.filter_algorithm import filter_bg_noise
-from submission.utils.sampler import GreedyCoresetSampler
-from submission.utils.crf import dense_crf
-from submission import qkv_open_clip as open_clip
+from eval.submission.utils.filter_algorithm import filter_bg_noise
+from eval.submission.utils.sampler import GreedyCoresetSampler
+from eval.submission.utils.crf import dense_crf
+from eval.submission import qkv_open_clip as open_clip
 import os
-from submission.utils.utils_area import (
+from eval.submission.utils.utils_area import (
     get_area_list_new,
     get_area_only_histo,
     train_select_binary_offsets,
@@ -28,7 +28,7 @@ from submission.utils.utils_area import (
 import numpy as np
 import torchvision
 
-from submission.module.prompt_ensemble import encode_text_with_prompt_ensemble
+from eval.submission.module.prompt_ensemble import encode_text_with_prompt_ensemble
 
 prompt_normal = ["normal {}"]
 
