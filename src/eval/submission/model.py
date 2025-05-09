@@ -161,7 +161,7 @@ class Model(nn.Module):
         self.feature_list_dinov2 = [6, 12, 18, 24]
         self.vision_width_dinov2 = 1024
 
-        self.stats = pickle.load(open("./eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
+        self.stats = pickle.load(open("./src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
 
         self.mem_instance_masks = None
 
