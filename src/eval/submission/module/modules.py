@@ -1,7 +1,7 @@
 import torch
-from submission.utils.comad_utils import *
+from eval.submission.utils.comad_utils import *
 import torch.nn.functional as F
-from submission.dino import vision_transformer as vits
+from eval.submission.dino import vision_transformer as vits
 from typing import Union, List, OrderedDict
 
 class DinoFeaturizer(nn.Module):
