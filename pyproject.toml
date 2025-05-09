@@ -12,11 +12,14 @@ dependencies = [
     "numpy==1.26.4",
     "wget==3.0",
     "pydensecrf",
+    "segment_anything",
+    "kmeans_pytorch",
     # TODO: Add your additional dependencies here
 ]
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
+segment_anything = {git = "https://github.com/facebookresearch/segment-anything.git", branch = "main"}
 pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git", branch = "master" }
 
 [tool.hatch.build.targets.wheel]
