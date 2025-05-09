@@ -19,15 +19,14 @@ from torch.utils.data import DataLoader
 from torchvision.transforms.v2 import Resize
 from tqdm import tqdm
 
-#from eval.submission.model import Model
-from submission.model import Model
+from eval.submission.model import Model
 
 CATEGORIES = [
-    #"breakfast_box",
-    #"juice_bottle",
-    #"pushpins",
+    "breakfast_box",
+    "juice_bottle",
+    "pushpins",
     "screw_bag",
-    #"splicing_connectors",
+    "splicing_connectors",
 ]
 
 
