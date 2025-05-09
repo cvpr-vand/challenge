@@ -1,0 +1,19 @@
+Metadata-Version: 1.1
+Name: pydensecrf
+Version: 1.0rc3
+Summary: A python interface to Philipp Krähenbühl's fully-connected (dense) CRF code.
+Home-page: http://github.com/lucasb-eyer/pydensecrf
+Author: Lucas Beyer
+Author-email: lucasb.eyer.be@gmail.com
+License: UNKNOWN
+Description: See the README.md at http://github.com/lucasb-eyer/pydensecrf
+Platform: UNKNOWN
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Programming Language :: C++
+Classifier: Programming Language :: Python
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Scientific/Engineering :: Image Recognition
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence

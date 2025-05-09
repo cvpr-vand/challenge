@@ -3,15 +3,22 @@ name = "vand2025_eval"
 version = "0.1.0"
 description = "VAND 2025 evaluation script"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = "==3.10.14"
 dependencies = [
     "anomalib[full]",
+    "cython==0.29.36",
+    "editables>=0.5",
+    "eigen>=0.1.1",
+    "hatchling>=1.27.0",
+    "pydensecrf==1.0rc3",
     "scikit-learn",
-    # TODO: Add your additional dependencies here
+    "setuptools==76.1.0",
 ]
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
+pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git"}
+#pydensecrf = { path = "tool/pydensecrf-master"}
 
 
 [tool.hatch.build.targets.wheel]
@@ -21,8 +28,14 @@ packages = ["src/eval"]
 eval = "eval.evaluate:eval"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "setuptools", "wheel", "cython==0.29.36"]
 build-backend = "hatchling.build"
+#requires = ["setuptools", "wheel", "cython==0.29.36"]
+#build-backend = "setuptools.build_meta"
+
+[tool.uv]
+build-constraint-dependence = ["setuptools"]
+no-build-isolation-package = ["pydensecrf"]
 
 [tool.ruff]
 line-length = 120
@@ -32,4 +45,5 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["eval"]
+
 
