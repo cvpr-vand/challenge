@@ -636,8 +636,6 @@ class Model(nn.Module):
         # TODO: Implement the forward pass of the model.
 
         batch = image
-        import pdb
-        pdb.set_trace()
         if self.class_name == "screw_bag":
             batch = rotate(batch, 3, interpolation=InterpolationMode.BILINEAR)
             batch = crop(batch, 35, 23, 180, 175)
