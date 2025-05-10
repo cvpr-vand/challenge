@@ -22,11 +22,11 @@ from tqdm import tqdm
 from eval.submission.model import Model
 
 CATEGORIES = [
-    #"breakfast_box",
-    #"juice_bottle",
-    #"pushpins",
+    "breakfast_box",
+    "juice_bottle",
+    "pushpins",
     "screw_bag",
-    #"splicing_connectors",
+    "splicing_connectors",
 ]
 
 
