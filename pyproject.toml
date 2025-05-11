@@ -14,6 +14,7 @@ dependencies = [
     "pydensecrf",
     "segment_anything",
     "kmeans_pytorch",
+    "h5py",
     # TODO: Add your additional dependencies here
 ]
 

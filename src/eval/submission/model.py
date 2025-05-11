@@ -23,7 +23,11 @@ from kmeans_pytorch import kmeans, kmeans_predict
 from eval.submission.utils.prompt_ensemble import encode_text_with_prompt_ensemble, encode_normal_text, encode_abnormal_text, encode_general_text, encode_obj_text
 from scipy.optimize import linear_sum_assignment
 import time
-
+import h5py
+import hashlib
+import os
+import json
+from typing import List, Dict, Any
 
 
 def to_np_img(m):
@@ -211,9 +215,16 @@ class Model(nn.Module):
         raw_image = to_np_img(image[0])
         height, width = raw_image.shape[:2]
         time1 = time.time()
-        masks = self.mask_generator.generate(raw_image)
+        # masks = self.mask_generator.generate(raw_image)
+        self.db = TensorDictDB(self.class_name)
+        result = self.db.get(raw_image)
+        if result:
+            masks = result
+        else:
+            masks = self.mask_generator.generate(raw_image)
+            self.db.add(raw_image, masks)
         time2 = time.time()
-        print("sam time:", time2 - time1)
+        # print("sam time:", time2 - time1)
         
 
         for pl in pseudo_labels.unique():
@@ -803,7 +814,7 @@ class Model(nn.Module):
             time1 = time.time()
             image_features, patch_tokens, proj_patch_tokens = self.model_clip.encode_image(batch, self.feature_list)
             time2 = time.time()
-            print("clip time:", time2 - time1)
+            # print("clip time:", time2 - time1)
             # image_features /= image_features.norm(dim=-1, keepdim=True)
             patch_tokens = [p[:, 1:, :] for p in patch_tokens]
             patch_tokens = [p.reshape(p.shape[0] * p.shape[1], p.shape[2]) for p in patch_tokens]
@@ -858,7 +869,7 @@ class Model(nn.Module):
         time1 = time.time()
         results = self.histogram(batch, mid_features, proj_patch_tokens, self.class_name, None)
         time2 = time.time()
-        print("histogram time:", time2 - time1)
+        # print("histogram time:", time2 - time1)
 
         hist_score = results['score']
 
@@ -988,4 +999,111 @@ class Model(nn.Module):
         batch_size = image.shape[0]
         pred_score = torch.tensor(pred_score).to(self.device)
         return ImageBatch(image=image, pred_score=pred_score,)
+        
+        
+class TensorDictDB:
+    def __init__(self, class_name: str):
+        filename = class_name + '.h5'
+        self.filename = filename
+        if os.path.exists(filename):
+            self._validate_existing_db()
+        else:
+            self._initialize_db()
+
+    def _initialize_db(self):
+        with h5py.File(self.filename, 'w') as f:
+            f.create_group('hash_index')
+            f.create_group('tensors')
+            f.create_group('metadata')
+
+    def _validate_existing_db(self):
+        with h5py.File(self.filename, 'r') as f:
+            required_groups = ['hash_index', 'tensors', 'metadata']
+            for group in required_groups:
+                if group not in f:
+                    raise ValueError(f"损坏的数据库文件：缺少 {group} 分组")
+
+    def _tensor_hash(self, tensor: np.ndarray) -> str:
+        """生成张量的哈希（支持NumPy和PyTorch CPU/CUDA张量）"""
+        if hasattr(tensor, 'is_cuda') and tensor.is_cuda:
+            tensor = tensor.cpu().numpy()
+        return hashlib.sha256(np.ascontiguousarray(tensor).tobytes()).hexdigest()
+
+    def _save_metadata_list(self, group: h5py.Group, data_list: List[Dict[str, Any]]):
+        """保存字典列表到HDF5 Group"""
+        for idx, data in enumerate(data_list):
+            element_group = group.create_group(f"element_{idx}")
+            self._save_metadata(element_group, data)
+
+    def _save_metadata(self, group: h5py.Group, data: Dict[str, Any]):
+        """递归保存单个字典到HDF5 Group"""
+        for key, value in data.items():
+            if isinstance(value, (int, float, str, bool)):
+                group.attrs[key] = value
+            elif isinstance(value, (np.ndarray, list)):
+                arr = np.array(value) if isinstance(value, list) else value
+                group.create_dataset(key, data=arr, compression='gzip')
+            elif isinstance(value, dict):
+                subgroup = group.create_group(key)
+                self._save_metadata(subgroup, value)
+            else:
+                raise TypeError(f"不支持的类型: {type(value)}")
+
+    def _load_metadata_list(self, group: h5py.Group) -> List[Dict[str, Any]]:
+        """从HDF5 Group加载字典列表"""
+        return [self._load_metadata(group[name]) for name in sorted(group.keys())]
+
+    def _load_metadata(self, group: h5py.Group) -> Dict[str, Any]:
+        """递归加载单个字典"""
+        metadata = {}
+        # 加载属性
+        for key, value in group.attrs.items():
+            metadata[key] = value
+        # 加载数据集和子组
+        for key in group.keys():
+            item = group[key]
+            if isinstance(item, h5py.Dataset):
+                metadata[key] = item[()]
+            elif isinstance(item, h5py.Group):
+                metadata[key] = self._load_metadata(item)
+        return metadata
+
+    def get(self, tensor_key: np.ndarray) -> List[Dict[str, Any]]:
+        """查询Key，返回对应的字典列表（不存在则返回None）"""
+        with h5py.File(self.filename, 'r') as f:
+            hash_key = self._tensor_hash(tensor_key)
+            if hash_key in f['hash_index']:
+                meta_ref = f['hash_index'][hash_key][()]
+                return self._load_metadata_list(f[meta_ref])
+        return None
+
+    def add(self, tensor_key: np.ndarray, meta_list: List[Dict[str, Any]]) -> bool:
+        """添加Key-Value列表（Key不存在时返回True）"""
+        hash_key = self._tensor_hash(tensor_key)
+        with h5py.File(self.filename, 'a') as f:
+            if hash_key in f['hash_index']:
+                return False  # Key已存在
+
+            # 存储张量
+            tensor_ref = f'tensors/{hash_key}'
+            f.create_dataset(tensor_ref, data=tensor_key, compression='gzip')
+
+            # 存储元数据列表
+            meta_ref = f'metadata/{hash_key}'
+            meta_group = f.create_group(meta_ref)
+            self._save_metadata_list(meta_group, meta_list)
+
+            # 更新索引
+            f['hash_index'].create_dataset(hash_key, data=meta_ref)
+            return True
+
+    def get_or_add(self, tensor_key: np.ndarray, meta_list: List[Dict[str, Any]] = None):
+        """查询Key，不存在时添加并返回None，存在时返回字典列表"""
+        existing = self.get(tensor_key)
+        if existing is not None:
+            return existing
+        elif meta_list is not None:
+            self.add(tensor_key, meta_list)
+            return None
+        raise ValueError("Key不存在且未提供meta_list")
 
