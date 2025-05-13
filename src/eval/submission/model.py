@@ -986,9 +986,37 @@ class Model(nn.Module):
                                                   self.stats[self.class_name]["instance_hungarian_match_scores"][
                                                       "unbiased_std"]
 
+        '''
         pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
         pred_score = sigmoid(pred_score)
-
+        '''
+        standard_hist_score = (hist_score - self.stats[self.class_name]["hist_scores"]["mean"]) / self.stats[self.class_name]["hist_scores"]["unbiased_std"]
+        if self.class_name == 'breakfast_box':
+            a1 = 16/(16+4+19)
+            a2 = 4/(16+4+19)
+            a3 = 19/(16+4+19)
+            pred_score = a1*standard_structural_score+a2*standard_instance_hungarian_match_score+a3*standard_hist_score
+        elif self.class_name == 'juice_bottle':
+            a1 = 2/(2+18+1)
+            a2 = 18/(2+18+1)
+            a3 = 1/(2+18+1)
+            pred_score = a1*standard_structural_score+a2*standard_instance_hungarian_match_score+a3*standard_hist_score
+        elif self.class_name == 'screw_bag':
+            a1 = 1/(1+2+16)
+            a2 = 2/(1+2+16)
+            a3 = 16/(1+2+16)
+            pred_score = a1*standard_structural_score+a2*standard_instance_hungarian_match_score+a3*standard_hist_score
+        elif self.class_name == 'splicing_connectors':
+            a1 = 1/(1+0+16)
+            a2 = 0
+            a3 = 16/(1+0+16)
+            pred_score = a1*standard_structural_score+a2*standard_instance_hungarian_match_score+a3*standard_hist_score
+        else:
+            pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+        pred_score = sigmoid(pred_score)
+            
+        
+        
         if self.anomaly_flag:
             pred_score = 1.
             self.anomaly_flag = False
