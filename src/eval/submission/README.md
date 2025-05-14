@@ -41,6 +41,6 @@ uv sync
 source .venv/bin/activate
 # Run the evaluation script (replace with the actual path to your dataset)
 uv run eval --dataset_path /path/to/your/mvtec_loco
-```__
+```
 
 3.  **Check the results:** The script will generate `metrics.csv` (detailed scores) and `results.json` (final aggregated metrics).
