@@ -6,7 +6,10 @@ import supervision as sv
 from torchvision.ops import box_convert
 from eval.submission.gdino_sam2.sam2.build_sam import build_sam2
 from eval.submission.gdino_sam2.sam2.sam2_image_predictor import SAM2ImagePredictor
-from eval.submission.gdino_sam2.grounding_dino.groundingdino.util.inference import load_model, load_image, predict
+import sys
+sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2/grounding_dino')
+#from eval.submission.gdino_sam2.grounding_dino.groundingdino.util.inference import load_model, load_image, predict
+from groundingdino.util.inference import load_model, load_image, predict
 from torchvision import transforms as T
 from PIL import Image
 

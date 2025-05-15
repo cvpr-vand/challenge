@@ -25,7 +25,7 @@ from scipy.optimize import linear_sum_assignment
 import time
 import sys
 sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2')
-#sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2/grounding_dino')
+
 from eval.submission.gdino_sam2.interface import GSAM2Predictor
 import os
 
