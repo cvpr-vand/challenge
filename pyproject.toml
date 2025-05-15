@@ -15,6 +15,7 @@ dependencies = [
     "segment_anything",
     "kmeans_pytorch",
     "h5py",
+    "addict",
     # TODO: Add your additional dependencies here
 ]
 
