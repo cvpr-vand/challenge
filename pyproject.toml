@@ -19,6 +19,7 @@ dependencies = [
     "hydra-core==1.3.2",
     #"groundingdino == 0.1.0",
     "addict==2.4.0",
+    "yapf == 0.43.0",
 ]
 
 [tool.uv.sources]
