@@ -93,11 +93,11 @@ class Model(nn.Module):
         
 
         def load_grounding_model():
-            # config_url = "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/GroundingDINO_SwinT_OGC.py"
+            config_url = "https://huggingface.co/ShilongLiu/GroundingDINO/blob/main/GroundingDINO_SwinT_OGC.cfg.py"
             checkpoint_url = "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth"
 
             model = build_model(
-                model_config_path='./src/eval/groundingdino/config/GroundingDINO_SwinT_OGC.py',
+                model_config_path=torch.hub.load_state_dict_from_url(config_url),
                 checkpoint_path=torch.hub.load_state_dict_from_url(checkpoint_url)
             )
     
