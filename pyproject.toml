@@ -16,7 +16,7 @@ dependencies = [
     "kmeans-pytorch==0.3",
     "supervision==0.25.1",
     "sam2==1.1.0",
-    "grounding_dino = 0.1.0",
+    "grounding_dino == 0.1.0",
 
 ]
 
