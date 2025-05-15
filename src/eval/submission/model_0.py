@@ -28,15 +28,6 @@ import hashlib
 import os
 import json
 from typing import List, Dict, Any
-import random
-
-# Grounding DINO
-from eval.submission.grounded_sam import (
-    load_model,
-    get_grounding_output
-)
-from groundingdino.util import get_tokenlizer
-from groundingdino.models import build_model
 
 
 def to_np_img(m):
@@ -53,7 +44,7 @@ class Model(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-        # setup_seed(42) # 提交版本注释
+        #setup_seed(42)
         # NOTE: Create your transformation pipeline (if needed).
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.transform = v2.Compose(
@@ -64,17 +55,16 @@ class Model(nn.Module):
         )
 
         # NOTE: Create your model.
-      
-        
+
         self.model_clip, _, _ = open_clip.create_model_and_transforms(
             'hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
         self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
-
         self.feature_list = [6, 12, 18, 24]
         self.embed_dim = 768
         self.vision_width = 1024
 
-        
+        #self.model_sam = sam_model_registry["vit_h"](checkpoint="./submission/checkpoint/sam_vit_h_4b8939.pth").to(self.device)
+        # self.model_sam = sam_model_registry["vit_b"](checkpoint = "./submission/checkpoint/sam_vit_b_01ec64.pth").to(self.device)
         import os
         from urllib.request import urlretrieve
         
@@ -87,21 +77,10 @@ class Model(nn.Module):
             print("Downloading SAM model...")
             urlretrieve(SAM_MODEL_URL, MODEL_PATH)
             print(f"Model saved to {MODEL_PATH}")
-        self.model_sam = sam_model_registry["vit_h"](checkpoint=MODEL_PATH).to(self.device)
+        self.model_sam = sam_model_registry["vit_h"](checkpoint=MODEL_PATH)
+        
+        
         self.mask_generator = SamAutomaticMaskGenerator(model=self.model_sam)
-        
-        GROUNDING_MODEL_URL = "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth"
-        GROUNDING_MODEL_PATH = os.path.join(CHECKPOINT_DIR, "groundingdino_swint_ogc.pth")
-        if not os.path.exists(GROUNDING_MODEL_PATH):
-            print("Downloading GroundingDino model...")
-            urlretrieve(GROUNDING_MODEL_URL, GROUNDING_MODEL_PATH)
-            print(f"Model saved to {GROUNDING_MODEL_PATH}")
-        
-        self.grounding_model = load_model('./src/groundingdino/config/GroundingDINO_SwinT_OGC.py', GROUNDING_MODEL_PATH,"cuda")
-        # import pdb
-        # pdb.set_trace()
-        # self.grounding_model = load_model('./src/eval/groundingdino/config/GroundingDINO_SwinT_OGC.py', './src/eval/submission/checkpoint/groundingdino_swint_ogc.pth',"cuda")
-
 
         self.memory_size = 2048
         self.n_neighbors = 2
@@ -186,15 +165,12 @@ class Model(nn.Module):
         self.feature_list_dinov2 = [6, 12, 18, 24]
         self.vision_width_dinov2 = 1024
 
-        # self.stats = pickle.load(open("./src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
         self.stats = pickle.load(open("./src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
 
         self.mem_instance_masks = None
 
         self.anomaly_flag = False
         self.validation = False  # True #False
-        self.text_prompt = {'breakfast_box': {'box_threshold': 0.25, 'text_threshold': 0.2, 'text_prompt': "almond . apple . container . oatmeal . orange . banana . ", 'background_prompt': ""}, 'juice_bottle': {'box_threshold': 0.3, 'text_threshold': 0.3, 'text_prompt': "alcohol. apple juice. beverage. bottle. liquor. glass bottle. juice. lemonade. liquid. olive oil. orange juice. yellow banana. bottle. glass bottle. glass jar. jug. juice. liquid. milk beverage. bottle. cherry. condiment. liquor. glass bottle. honey. juice. liquid. maple syrup. sauce. syrup. tomato sauce.", 'background_prompt': ""}, 'pushpins': {'box_threshold': 0.3, 'text_threshold': 0.2, 'text_prompt': "pin .", 'background_prompt': "container ."}, 'screw_bag': {'box_threshold': 0.3, 'text_threshold': 0.3, 'text_prompt': "metal bolts. metal hex nuts. metal washers. metal screws. zip-lock bag. screw. ring. metal circle. bag. bolt. container. nut. package. plastic. screw. tool.", 'background_prompt': "zip-lock bag."}, 'splicing_connectors': {'box_threshold': 0.3, 'text_threshold': 0.2, 'text_prompt': "attach. cable. connector. hook. electric outlet. plug. pole. socket. wire.", 'background_prompt': ""}}
-
 
     def set_viz(self, viz):
         self.visualization = viz
@@ -231,57 +207,6 @@ class Model(nn.Module):
 
             merged_a = label_map[a]
             return merged_a
-        
-        def remove_overlapping_boxes(boxes, thr=0.5):
-            """
-            通过计算交并比(IoU)去除重叠的矩形框
-            
-            参数:
-                boxes: 矩形框列表，每个矩形框格式为[xmin, ymin, xmax, ymax]
-                thr: IoU阈值，大于此阈值则认为重叠(默认0.5)
-            
-            返回:
-                去除重叠后的矩形框列表
-            """
-            if not boxes:
-                return []
-            
-            # 将boxes转换为float类型并拷贝，避免修改原始数据
-            boxes = [list(map(float, box)) for box in boxes]
-            
-            # 按矩形面积从大到小排序
-            boxes.sort(key=lambda box: (box[2]-box[0])*(box[3]-box[1]), reverse=True)
-            
-            keep = []  # 保留的矩形框
-            
-            while boxes:
-                current = boxes.pop(0)  # 取出当前最大的框
-                keep.append(current)
-                
-                # 计算剩余框与当前框的IoU，并筛选出IoU小于阈值的框
-                boxes = [box for box in boxes if iou_box(current, box) <= thr]
-            
-            return keep
-
-        def iou_box(box1, box2):
-            # 计算交集区域
-            x1 = max(box1[0], box2[0])
-            y1 = max(box1[1], box2[1])
-            x2 = min(box1[2], box2[2])
-            y2 = min(box1[3], box2[3])
-            
-            # 计算交集面积
-            inter_area = max(0, x2 - x1) * max(0, y2 - y1)
-            
-            # 计算各自面积
-            area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-            area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
-            
-            # 计算并集面积
-            union_area = area1 + area2 - inter_area
-            
-            # 计算IoU
-            return inter_area / union_area if union_area > 0 else 0
 
         pseudo_labels = kmeans_predict(cluster_feature, self.cluster_centers, 'euclidean', device=self.device)
         kmeans_mask = torch.ones_like(pseudo_labels) * (self.classes - 1)  # default to background
@@ -291,120 +216,15 @@ class Model(nn.Module):
         height, width = raw_image.shape[:2]
         time1 = time.time()
         # masks = self.mask_generator.generate(raw_image)
-        
-        # 维护数据库
         self.db = TensorDictDB(self.class_name)
         result = self.db.get(raw_image)
         if result:
-            print('***Exist in h5!')
             masks = result
         else:
-            # masks = self.mask_generator.generate(raw_image)
-            
-            ####
-            # groundingSAM_start
-            sam = self.model_sam
-            predictor = SamPredictor(sam)
-            text_prompt = self.text_prompt[self.class_name]['text_prompt']
-            background_prompt = self.text_prompt[self.class_name]['background_prompt']
-            box_threshold = self.text_prompt[self.class_name]['box_threshold']
-            text_threshold = self.text_prompt[self.class_name]['text_threshold']
-            boxes_filt, pred_phrases = get_grounding_output(
-                self.grounding_model, image[0], text_prompt, box_threshold, text_threshold, device="cuda"
-            )
-
-            background_box = list()
-            for i,text in enumerate(pred_phrases):
-                for j in background_prompt.split('.'):
-                    if j in text.replace(' - ','-') and j != ' ' and j != '':
-                        background_box.append(i)
-
-            predictor.set_image(raw_image)
-
-            H, W = 448, 448
-            for i in range(boxes_filt.size(0)):
-                boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
-                boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
-                boxes_filt[i][2:] += boxes_filt[i][:2]
-
-            boxes_filt = boxes_filt.cpu() # (xmin, ymin, xmax, ymax)
-            transformed_boxes = predictor.transform.apply_boxes_torch(boxes_filt, image.shape[:2]).to(self.device)
-
-            ###
-            # 去重重叠框
-            boxes = boxes_filt.cpu().numpy()
-            boxes_nofiltered = []
-            for i, box in enumerate(boxes):
-                xmin, ymin, xmax, ymax = map(int, box)
-                boxes_nofiltered.append([xmin, ymin, xmax, ymax])
-            
-            boxes_filtered = remove_overlapping_boxes(boxes_nofiltered, thr=0.3)
-            ###
-
-            masks0, _, _ = predictor.predict_torch(
-                point_coords = None,
-                point_labels = None,
-                boxes = transformed_boxes.to(self.device),
-                multimask_output = False,
-            )
-
-            masks = []
-            for mask in masks0:
-                mask = torch.squeeze(mask, dim=0)
-                # resized_tensor = F.interpolate(
-                #     mask.unsqueeze(0).unsqueeze(0),  # 增加 batch 和 channel 维度 (1, 1, 1280, 1600)
-                #     size=(448, 448),
-                #     mode='bilinear',  # 或 'nearest', 'bicubic'
-                # ).squeeze(0).squeeze(0)  # 恢复原始维度 (448, 448)
-                # mask = resized_tensor.cpu().numpy()
-                mask = mask.cpu().numpy()
-                masks.append({'segmentation': mask, 'area': np.sum(mask)})
-            # groundingSAM_end
-            ####
-            
+            masks = self.mask_generator.generate(raw_image)
             self.db.add(raw_image, masks)
         time2 = time.time()
-        print("sam time:", time2 - time1)
-
-        ####
-        # cal pushpins num
-        sam = self.model_sam
-        predictor = SamPredictor(sam)
-        text_prompt = self.text_prompt[self.class_name]['text_prompt']
-        background_prompt = self.text_prompt[self.class_name]['background_prompt']
-        box_threshold = self.text_prompt[self.class_name]['box_threshold']
-        text_threshold = self.text_prompt[self.class_name]['text_threshold']
-        boxes_filt, pred_phrases = get_grounding_output(
-            self.grounding_model, image[0], text_prompt, box_threshold, text_threshold, device="cuda"
-        )
-
-        background_box = list()
-        for i,text in enumerate(pred_phrases):
-            for j in background_prompt.split('.'):
-                if j in text.replace(' - ','-') and j != ' ' and j != '':
-                    background_box.append(i)
-
-        predictor.set_image(raw_image)
-
-        H, W = 448, 448
-        for i in range(boxes_filt.size(0)):
-            boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
-            boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
-            boxes_filt[i][2:] += boxes_filt[i][:2]
-
-        boxes_filt = boxes_filt.cpu() # (xmin, ymin, xmax, ymax)
-        transformed_boxes = predictor.transform.apply_boxes_torch(boxes_filt, image.shape[:2]).to(self.device)
-
-        ###
-        # 去重重叠框
-        boxes = boxes_filt.cpu().numpy()
-        boxes_nofiltered = []
-        for i, box in enumerate(boxes):
-            xmin, ymin, xmax, ymax = map(int, box)
-            boxes_nofiltered.append([xmin, ymin, xmax, ymax])
-        
-        boxes_filtered = remove_overlapping_boxes(boxes_nofiltered, thr=0.3)
-        #### 
+        # print("sam time:", time2 - time1)
         
 
         for pl in pseudo_labels.unique():
@@ -425,6 +245,13 @@ class Model(nn.Module):
                 temp_prob = prob.squeeze(0).item()
                 if temp_prob > self.query_threshold_dict[class_name][temp_label]:  # threshold for each class
                     kmeans_mask[mask] = temp_label
+
+        #raw_image = to_np_img(image[0])
+        #height, width = raw_image.shape[:2]
+        #time1 = time.time()
+        #masks = self.mask_generator.generate(raw_image)
+        #time2 = time.time()
+        #print("sam time:", time2 - time1)
         
 
         kmeans_label = pseudo_labels.view(self.feat_size, self.feat_size).cpu().numpy()
@@ -481,7 +308,6 @@ class Model(nn.Module):
                     instance_masks.append(instance_mask.astype(np.bool_).reshape(-1))
 
 
-            pushpins_count = len(boxes_filtered)
             if self.few_shot_inited and pushpins_count != self.pushpins_count and self.anomaly_flag is False:
                 self.anomaly_flag = True
                 print('number of pushpins: {}, but canonical number of pushpins: {}'.format(pushpins_count,
@@ -988,7 +814,7 @@ class Model(nn.Module):
             time1 = time.time()
             image_features, patch_tokens, proj_patch_tokens = self.model_clip.encode_image(batch, self.feature_list)
             time2 = time.time()
-            print("clip time:", time2 - time1)
+            # print("clip time:", time2 - time1)
             # image_features /= image_features.norm(dim=-1, keepdim=True)
             patch_tokens = [p[:, 1:, :] for p in patch_tokens]
             patch_tokens = [p.reshape(p.shape[0] * p.shape[1], p.shape[2]) for p in patch_tokens]
@@ -1043,7 +869,7 @@ class Model(nn.Module):
         time1 = time.time()
         results = self.histogram(batch, mid_features, proj_patch_tokens, self.class_name, None)
         time2 = time.time()
-        print("histogram time:", time2 - time1)
+        # print("histogram time:", time2 - time1)
 
         hist_score = results['score']
 
@@ -1161,10 +987,7 @@ class Model(nn.Module):
                                                       "unbiased_std"]
 
         '''
-        # ori
         pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
-        
-        standard_hist_score = (hist_score - self.stats[self.class_name]["hist_scores"]["mean"])/self.stats[self.class_name]["hist_scores"]["unbiased_std"]
         pred_score = sigmoid(pred_score)
         '''
         standard_hist_score = (hist_score - self.stats[self.class_name]["hist_scores"]["mean"]) / self.stats[self.class_name]["hist_scores"]["unbiased_std"]
@@ -1172,21 +995,28 @@ class Model(nn.Module):
             a1 = 16/(16+4+19)
             a2 = 4/(16+4+19)
             a3 = 19/(16+4+19)
-            pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
-           
+            pred_score = a1*standard_structural_score+a2*standard_instance_hungarian_match_score+a3*standard_hist_score
         elif self.class_name == 'juice_bottle':
-            a1 = 2/(2+18+1) 
+            a1 = 2/(2+18+1)
             a2 = 18/(2+18+1)
             a3 = 1/(2+18+1)
-            pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
+            pred_score = a1*standard_structural_score+a2*standard_instance_hungarian_match_score+a3*standard_hist_score
         elif self.class_name == 'screw_bag':
             a1 = 1/(1+2+16)
             a2 = 2/(1+2+16)
             a3 = 16/(1+2+16)
-            pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
+            pred_score = a1*standard_structural_score+a2*standard_instance_hungarian_match_score+a3*standard_hist_score
+        elif self.class_name == 'splicing_connectors':
+            a1 = 1/(1+0+16)
+            a2 = 0
+            a3 = 16/(1+0+16)
+            pred_score = a1*standard_structural_score+a2*standard_instance_hungarian_match_score+a3*standard_hist_score
         else:
             pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
         pred_score = sigmoid(pred_score)
+            
+        
+        
         if self.anomaly_flag:
             pred_score = 1.
             self.anomaly_flag = False
@@ -1197,9 +1027,8 @@ class Model(nn.Module):
         batch_size = image.shape[0]
         pred_score = torch.tensor(pred_score).to(self.device)
         return ImageBatch(image=image, pred_score=pred_score,)
-
-
-
+        
+        
 class TensorDictDB:
     def __init__(self, class_name: str):
         filename = class_name + '.h5'
@@ -1210,14 +1039,12 @@ class TensorDictDB:
             self._initialize_db()
 
     def _initialize_db(self):
-        """初始化空数据库结构"""
         with h5py.File(self.filename, 'w') as f:
             f.create_group('hash_index')
             f.create_group('tensors')
             f.create_group('metadata')
 
     def _validate_existing_db(self):
-        """验证现有数据库结构完整性"""
         with h5py.File(self.filename, 'r') as f:
             required_groups = ['hash_index', 'tensors', 'metadata']
             for group in required_groups:
@@ -1307,3 +1134,4 @@ class TensorDictDB:
             self.add(tensor_key, meta_list)
             return None
         raise ValueError("Key不存在且未提供meta_list")
+
