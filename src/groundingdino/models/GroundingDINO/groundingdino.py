@@ -105,6 +105,17 @@ class GroundingDINO(nn.Module):
 
         # bert
         # text_encoder_type = '/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/google-bert/bert-base-uncased'
+        from transformers import BertModel, BertTokenizer
+
+	cache_dir = "./checkpoint/google/bert-base-uncased"
+
+        # 下载模型和 tokenizer 到指定目录
+        model = BertModel.from_pretrained("google/bert-base-uncased", cache_dir=cache_dir)
+        tokenizer = BertTokenizer.from_pretrained("google/bert-base-uncased", cache_dir=cache_dir)
+
+        print(f"模型已缓存到：{cache_dir}")
+        text_encoder_type = cache_dir
+        
         self.tokenizer = get_tokenlizer.get_tokenlizer(text_encoder_type)
         self.bert = get_tokenlizer.get_pretrained_language_model(text_encoder_type)
         self.bert.pooler.dense.weight.requires_grad_(False)
