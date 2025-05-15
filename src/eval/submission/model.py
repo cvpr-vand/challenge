@@ -98,8 +98,6 @@ class Model(nn.Module):
             print(f"Model saved to {GROUNDING_MODEL_PATH}")
         
         self.grounding_model = load_model('./src/groundingdino/config/GroundingDINO_SwinT_OGC.py', GROUNDING_MODEL_PATH,"cuda")
-        import pdb
-        pdb.set_trace()
         # self.grounding_model = load_model('./src/eval/groundingdino/config/GroundingDINO_SwinT_OGC.py', './src/eval/submission/checkpoint/groundingdino_swint_ogc.pth',"cuda")
 
 
