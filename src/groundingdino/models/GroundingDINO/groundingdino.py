@@ -105,6 +105,7 @@ class GroundingDINO(nn.Module):
 
         # bert
         # text_encoder_type = '/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/google-bert/bert-base-uncased'
+        from transformers.modeling_utils import no_init_weights, init_empty_weights
         from transformers import BertModel, BertTokenizer
         cache_dir = "./checkpoint/google-bert/bert-base-uncased"
         # 下载模型和 tokenizer 到指定目录
