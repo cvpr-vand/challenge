@@ -19,7 +19,6 @@ from groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
 # segment anything
 from segment_anything import (
     sam_model_registry,
-    sam_hq_model_registry,
     SamPredictor
 )
 import cv2
@@ -212,10 +211,7 @@ if __name__ == "__main__":
     )
 
     # initialize SAM
-    if use_sam_hq:
-        predictor = SamPredictor(sam_hq_model_registry[sam_version](checkpoint=sam_hq_checkpoint).to(device))
-    else:
-        predictor = SamPredictor(sam_model_registry[sam_version](checkpoint=sam_checkpoint).to(device))
+    predictor = SamPredictor(sam_model_registry[sam_version](checkpoint=sam_checkpoint).to(device))
     image = cv2.imread(image_path)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     predictor.set_image(image)
