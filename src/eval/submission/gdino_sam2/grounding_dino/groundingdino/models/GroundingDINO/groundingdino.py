@@ -23,8 +23,8 @@ from torch import nn
 from torchvision.ops.boxes import nms
 from transformers import AutoTokenizer, BertModel, BertTokenizer, RobertaModel, RobertaTokenizerFast
 
-from submission.gdino_sam2.grounding_dino.groundingdino.util import box_ops, get_tokenlizer
-from submission.gdino_sam2.grounding_dino.groundingdino.util.misc import (
+from groundingdino.util import box_ops, get_tokenlizer
+from groundingdino.util.misc import (
     NestedTensor,
     accuracy,
     get_world_size,
