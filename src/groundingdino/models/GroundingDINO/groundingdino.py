@@ -138,6 +138,8 @@ class GroundingDINO(nn.Module):
         
         text_encoder_type = save_dir
         self.tokenizer = get_tokenlizer.get_tokenlizer(text_encoder_type)
+        import pdb
+        pdb.set_trace()
         self.bert = get_tokenlizer.get_pretrained_language_model(text_encoder_type)
         self.bert.pooler.dense.weight.requires_grad_(False)
         self.bert.pooler.dense.bias.requires_grad_(False)
