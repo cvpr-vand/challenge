@@ -35,8 +35,8 @@ from eval.submission.grounded_sam import (
     load_model,
     get_grounding_output
 )
-from eval.groundingdino.util import get_tokenlizer
-from eval.groundingdino.models import build_model
+from groundingdino.util import get_tokenlizer
+from groundingdino.models import build_model
 
 
 def to_np_img(m):
