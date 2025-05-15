@@ -15,7 +15,7 @@ import pickle
 from scipy.stats import norm
 
 #import open_clip_local as open_clip
-import submission.open_clip_local as open_clip
+import eval.submission.open_clip_local as open_clip
 import cv2
 import numpy as np
 import torch.nn.functional as F
