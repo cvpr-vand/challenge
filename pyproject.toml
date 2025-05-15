@@ -21,7 +21,7 @@ dependencies = [
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
 pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git"}
 sam2 = {git = "https://github.com/facebookresearch/sam2.git", branch = "main"}
-grounding_dino = {git = "https://github.com/IDEA-Research/GroundingDINO.git", branch = "main"}
+#grounding_dino = {git = "https://github.com/IDEA-Research/GroundingDINO.git", branch = "main"}
 
 
 
