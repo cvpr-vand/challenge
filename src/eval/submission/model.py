@@ -24,7 +24,7 @@ from eval.submission.utils.prompt_ensemble import encode_text_with_prompt_ensemb
 from scipy.optimize import linear_sum_assignment
 import time
 
-from eval.submission.gdino_sam2 import GSAM2Predictor
+from eval.submission.gdino_sam2.interface import GSAM2Predictor
 import os
 
 

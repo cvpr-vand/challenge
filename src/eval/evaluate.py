@@ -26,8 +26,8 @@ CATEGORIES = [
     #"breakfast_box",
     #"juice_bottle",
     #pushpins",
-    #"screw_bag",
-    "splicing_connectors",
+    "screw_bag",
+    #"splicing_connectors",
 ]
 
 
@@ -45,8 +45,8 @@ def parse_args() -> argparse.Namespace:
         "--seeds",
         type=int,
         nargs="*",
-        default=[42],
-        #default=[42, 0, 1234],
+        #default=[42],
+        default=[42, 0, 1234],
         help="List of seed values for reproducibility. Default is [42, 0, 1234].",
     )
     parser.add_argument(
@@ -58,8 +58,8 @@ def parse_args() -> argparse.Namespace:
         "--k_shots",
         type=int,
         nargs="+",
-        defaule=[4],
-        #default=[1, 2, 4, 8],
+        #defaule=[4],
+        default=[1, 2, 4, 8],
         help="List of integers for few-shot learning samples.",
     )
     parser.add_argument(
