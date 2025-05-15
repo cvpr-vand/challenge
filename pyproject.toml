@@ -28,6 +28,7 @@ dependencies = [
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
 #pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git"}
 #groundingdino = {git = "https://github.com/IDEA-Research/GroundingDINO.git", branch = "main"}
+groundingdino = { path = "/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2/grounding_dino" }
 
 
 [tool.hatch.build.targets.wheel]
