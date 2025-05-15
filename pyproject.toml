@@ -16,16 +16,14 @@ dependencies = [
     "kmeans-pytorch==0.3",
     "supervision==0.25.1",
     "hydra-core==1.3.2",
-    #"sam 2==1.1.0",
-    #"grounding_dino == 0.1.0",
+    "groundingdino == 0.1.0",
 
 ]
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
 pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git"}
-#sam2 = {git = "https://github.com/facebookresearch/sam2.git", branch = "main"}
-#grounding_dino = {git = "https://github.com/IDEA-Research/GroundingDINO.git", branch = "main"}
+groundingdino = {git = "https://github.com/IDEA-Research/GroundingDINO.git", branch = "main"}
 
 
 
