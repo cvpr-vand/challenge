@@ -105,6 +105,7 @@ class GroundingDINO(nn.Module):
 
         # bert
         # text_encoder_type = '/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/google-bert/bert-base-uncased'
+        '''
         from transformers.modeling_utils import no_init_weights, init_empty_weights
         from transformers import BertModel, BertTokenizer
         cache_dir = "./checkpoint/google-bert/bert-base-uncased"
@@ -112,6 +113,21 @@ class GroundingDINO(nn.Module):
         model = BertModel.from_pretrained("google-bert/bert-base-uncased", cache_dir=cache_dir)
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased", cache_dir=cache_dir)
         print(f"模型已缓存到：{cache_dir}")
+        '''
+        import transformers
+        from transformers import BertModel
+
+        cache_dir = "./checkpoint/google-bert/bert-base-uncased"
+        # 检查版本兼容性
+        if hasattr(transformers, 'init_empty_weights'):
+            # 新版本（4.20.0+）：使用 init_empty_weights
+            from transformers import init_empty_weights
+            with init_empty_weights():
+                model = BertModel.from_pretrained("google-bert/bert-base-uncased", cache_dir=cache_dir)
+        else:
+            # 旧版本：直接加载模型（可能占用更多内存）
+            model = BertModel.from_pretrained("google-bert/bert-base-uncased", cache_dir=cache_dir)
+
         
         text_encoder_type = cache_dir
         self.tokenizer = get_tokenlizer.get_tokenlizer(text_encoder_type)
