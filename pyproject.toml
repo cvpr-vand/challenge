@@ -13,6 +13,7 @@ dependencies = [
     "scikit-learn",
     "setuptools==76.1.0",
     "timm==1.0.15",
+    "kmeans-pytorch==0.3",
 ]
 
 [tool.uv.sources]
