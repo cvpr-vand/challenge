@@ -114,22 +114,29 @@ class GroundingDINO(nn.Module):
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased", cache_dir=cache_dir)
         print(f"模型已缓存到：{cache_dir}")
         '''
-        import transformers
-        from transformers import BertModel
+        from huggingface_hub import snapshot_download
+        import os
 
-        cache_dir = "./checkpoint/google-bert/bert-base-uncased"
-        # 检查版本兼容性
-        if hasattr(transformers, 'init_empty_weights'):
-            # 新版本（4.20.0+）：使用 init_empty_weights
-            from transformers import init_empty_weights
-            with init_empty_weights():
-                model = BertModel.from_pretrained("google-bert/bert-base-uncased", cache_dir=cache_dir)
-        else:
-            # 旧版本：直接加载模型（可能占用更多内存）
-            model = BertModel.from_pretrained("google-bert/bert-base-uncased", cache_dir=cache_dir)
+        # 配置参数
+        model_id = "google-bert/bert-base-uncased"  # 模型名称
+        save_dir = "./checkpoint/google-bert/bert-base-uncased"  # 指定本地保存路径
+
+        # 创建目录（如果不存在）
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # 下载模型文件（包括配置文件、权重、tokenizer）
+        snapshot_download(
+            repo_id=model_id,
+            local_dir=save_dir,
+            local_dir_use_symlinks=False,  # 直接复制文件，而非软链接
+            resume_download=True,          # 支持断点续传
+            token=None,                   # 如果访问受限，可填入HuggingFace账号token
+        )
+
+        print(f"模型已下载到：{os.path.abspath(save_dir)}")
 
         
-        text_encoder_type = cache_dir
+        text_encoder_type = save_dir
         self.tokenizer = get_tokenlizer.get_tokenlizer(text_encoder_type)
         self.bert = get_tokenlizer.get_pretrained_language_model(text_encoder_type)
         self.bert.pooler.dense.weight.requires_grad_(False)
