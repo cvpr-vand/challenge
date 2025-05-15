@@ -8,7 +8,8 @@ dependencies = [
     "anomalib[full]",
     "cython==0.29.36",
     "editables>=0.5",
-    "eigen>=0.1.1",    "hatchling>=1.27.0",
+    "eigen>=0.1.1",
+    "hatchling>=1.27.0",
     #"pydensecrf==1.0rc3",
     "scikit-learn",
     "setuptools==76.1.0",
@@ -16,19 +17,14 @@ dependencies = [
     "kmeans-pytorch==0.3",
     "supervision==0.25.1",
     "hydra-core==1.3.2",
-    "pip",
-    "torch",
     "groundingdino == 0.1.0",
-
 ]
 
 [tool.uv.sources]
+
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
 #pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git"}
-groundingdino = {git = "https://github.com/IDEA-Research/GroundingDINO.git", branch = "main"}
-
-
-
+#groundingdino = {git = "https://github.com/IDEA-Research/GroundingDINO.git", branch = "main"}
 
 
 [tool.hatch.build.targets.wheel]
@@ -43,8 +39,8 @@ build-backend = "hatchling.build"
 #requires = ["setuptools", "wheel", "cython==0.29.36"]
 #build-backend = "setuptools.build_meta"
 
-#[tool.uv]
-#build-constraint-dependence = ["setuptools"]
+[tool.uv]
+build-constraint-dependence = ["setuptools"]
 #no-build-isolation-package = ["pydensecrf"]
 
 [tool.ruff]
