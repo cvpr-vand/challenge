@@ -20,6 +20,7 @@ dependencies = [
     #"groundingdino == 0.1.0",
     "addict==2.4.0",
     "yapf == 0.43.0",
+    "pycocotools==2.0.8",
 ]
 
 [tool.uv.sources]
