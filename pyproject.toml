@@ -16,7 +16,7 @@ dependencies = [
     "kmeans-pytorch==0.3",
     "supervision==0.25.1",
     "hydra-core==1.3.2",
-    "torch==2.6.0",
+    "torch",
     "groundingdino == 0.1.0",
 
 ]
