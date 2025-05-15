@@ -147,7 +147,7 @@ jobs:
           git commit -m "Add evaluation results for PR \"${PR_NAME}\" (#${PR_NUMBER}) by ${PR_CREATOR}"
           # Removed git push command
       - name: Push to gh-pages
-        uses: ad-m/github-push-action@master
+        uses: ad-m/github-push-action@d91a481090679876dfc4178fef17f286781251df
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages
