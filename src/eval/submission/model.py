@@ -24,7 +24,7 @@ from eval.submission.utils.prompt_ensemble import encode_text_with_prompt_ensemb
 from scipy.optimize import linear_sum_assignment
 import time
 import sys
-sys.path.append('eval/submission/gdino_sam2')
+sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2')
 from eval.submission.gdino_sam2.interface import GSAM2Predictor
 import os
 
