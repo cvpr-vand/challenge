@@ -50,7 +50,7 @@ class Model(nn.Module):
         super().__init__()
 
         print("CUDA!!!!!")
-        os.sysem('nvcc --version')
+        os.system('nvcc --version')
 
         #setup_seed(42)
         # NOTE: Create your transformation pipeline (if needed).
