@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = "==3.10.14"
 dependencies = [
     "anomalib[full]",
+    "torch==2.6.0",
     "cython==0.29.36",
     "editables>=0.5",
     "eigen>=0.1.1",
