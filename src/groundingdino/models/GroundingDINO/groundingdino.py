@@ -104,7 +104,7 @@ class GroundingDINO(nn.Module):
         self.dn_labelbook_size = dn_labelbook_size
 
         # bert
-        text_encoder_type = '/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/google-bert/bert-base-uncased'
+        # text_encoder_type = '/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/google-bert/bert-base-uncased'
         self.tokenizer = get_tokenlizer.get_tokenlizer(text_encoder_type)
         self.bert = get_tokenlizer.get_pretrained_language_model(text_encoder_type)
         self.bert.pooler.dense.weight.requires_grad_(False)
