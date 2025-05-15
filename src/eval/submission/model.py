@@ -4,6 +4,7 @@ import torch
 from anomalib.data import ImageBatch
 from torch import nn
 from torchvision.transforms import v2
+import os
 
 #from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 from matplotlib import pyplot as plt
@@ -47,6 +48,9 @@ class Model(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
+
+        print("CUDA!!!!!")
+        os.sysem('nvcc --version')
 
         #setup_seed(42)
         # NOTE: Create your transformation pipeline (if needed).
