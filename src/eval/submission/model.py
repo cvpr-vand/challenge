@@ -25,6 +25,8 @@ from scipy.optimize import linear_sum_assignment
 import time
 from eval.submission.gdino_sam2.interface import GSAM2Predictor
 import os
+import sys
+sys.path.append('eval/submission/gdino_sam2')
 
 
 
