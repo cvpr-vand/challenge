@@ -3,16 +3,30 @@ name = "vand2025_eval"
 version = "0.1.0"
 description = "VAND 2025 evaluation script"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = "==3.10.14"
 dependencies = [
     "anomalib[full]",
-    "scikit-learn",
+    "scikit-learn==1.6.1",
+    "torch==2.3.1",
+    "opencv-python==4.10.0.82",
+    "numpy==1.26.4",
+    "wget==3.0",
+    "pydensecrf",
+    "segment_anything",
+    "kmeans_pytorch",
+    "h5py",
+    "addict==2.4.0",
+    "yapf==0.43.0",
+    "pycocotools",
+    "hf_xet",
+    "transformers==4.45.0",
     # TODO: Add your additional dependencies here
 ]
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
-
+segment_anything = {git = "https://github.com/facebookresearch/segment-anything.git", branch = "main"}
+pydensecrf = { git = "https://github.com/lucasb-eyer/pydensecrf.git", branch = "master" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/eval"]
@@ -32,4 +46,3 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["eval"]
-
