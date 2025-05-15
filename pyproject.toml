@@ -17,6 +17,7 @@ dependencies = [
     "h5py",
     "addict==2.4.0",
     "yapf==0.43.0",
+    "pycocotools",
     # TODO: Add your additional dependencies here
 ]
 
