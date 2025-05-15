@@ -8,8 +8,8 @@ from PIL import Image
 from torchvision.ops import box_convert
 import bisect
 import groundingdino
-import groundingdino.datasets
-import groundingdino.datasets.transforms as T
+from groundingdino.datasets import transforms as T
+#import groundingdino.datasets.transforms as T
 from groundingdino.models import build_model
 from groundingdino.util.misc import clean_state_dict
 from groundingdino.util.slconfig import SLConfig
