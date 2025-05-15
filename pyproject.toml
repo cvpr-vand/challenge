@@ -18,6 +18,7 @@ dependencies = [
     "addict==2.4.0",
     "yapf==0.43.0",
     "pycocotools",
+    "transformers"
     # TODO: Add your additional dependencies here
 ]
 
