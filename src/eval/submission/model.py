@@ -5,7 +5,7 @@ from anomalib.data import ImageBatch
 from torch import nn
 from torchvision.transforms import v2
 
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+#from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 from matplotlib import pyplot as plt
 
 import matplotlib
