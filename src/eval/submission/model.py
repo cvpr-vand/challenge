@@ -51,6 +51,7 @@ class Model(nn.Module):
 
         print("CUDA!!!!!")
         os.system('nvcc --version')
+        print("CUDA2!!!!!")
 
         #setup_seed(42)
         # NOTE: Create your transformation pipeline (if needed).
