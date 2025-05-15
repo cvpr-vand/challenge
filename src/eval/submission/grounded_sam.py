@@ -11,10 +11,10 @@ from PIL import Image, ImageDraw, ImageFont
 
 # import groundingdino.datasets.transforms as T # ori
 from torchvision.transforms import v2
-from eval.groundingdino.models import build_model
-from eval.groundingdino.util import box_ops
-from eval.groundingdino.util.slconfig import SLConfig
-from eval.groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
+from groundingdino.models import build_model
+from groundingdino.util import box_ops
+from groundingdino.util.slconfig import SLConfig
+from groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
 
 # segment anything
 from segment_anything import (
