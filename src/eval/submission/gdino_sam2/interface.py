@@ -4,8 +4,8 @@ import torch
 import numpy as np
 import supervision as sv
 from torchvision.ops import box_convert
-from sam2.build_sam import build_sam2
-from sam2.sam2_image_predictor import SAM2ImagePredictor
+from eval.submission.gdino_sam2.sam2.build_sam import build_sam2
+from eval.submission.gdino_sam2.sam2.sam2_image_predictor import SAM2ImagePredictor
 from grounding_dino.groundingdino.util.inference import load_model, load_image, predict
 from torchvision import transforms as T
 from PIL import Image
