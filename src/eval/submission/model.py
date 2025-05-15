@@ -50,7 +50,11 @@ class Model(nn.Module):
         super().__init__()
 
         print("CUDA!!!!!")
-        os.system('nvcc --version')
+        import subprocess
+        # 使用subprocess.check_output来运行nvcc命令，并获取输出
+        output = subprocess.check_output(['nvcc', '--version']).decode('utf-8')
+        # 打印输出
+        print(output)
         print("CUDA2!!!!!")
 
         #setup_seed(42)
