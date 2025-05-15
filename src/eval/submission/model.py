@@ -93,11 +93,10 @@ class Model(nn.Module):
         GROUNDING_MODEL_URL = "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth"
         GROUNDING_MODEL_PATH = os.path.join(CHECKPOINT_DIR, "groundingdino_swint_ogc.pth")
         if not os.path.exists(GROUNDING_MODEL_PATH):
-            print("Downloading SAM model...")
+            print("Downloading GroundingDino model...")
             urlretrieve(GROUNDING_MODEL_URL, GROUNDING_MODEL_PATH)
-        self.grounding_model = load_model('./src/eval/groundingdino/config/GroundingDINO_SwinT_OGC.py', GROUNDING_MODEL_PATH,"cuda")
+        self.grounding_model = load_model('./src/groundingdino/config/GroundingDINO_SwinT_OGC.py', GROUNDING_MODEL_PATH,"cuda")
         # self.grounding_model = load_model('./src/eval/groundingdino/config/GroundingDINO_SwinT_OGC.py', './src/eval/submission/checkpoint/groundingdino_swint_ogc.pth',"cuda")
-        
 
 
         self.memory_size = 2048
