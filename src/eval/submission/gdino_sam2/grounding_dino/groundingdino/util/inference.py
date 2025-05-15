@@ -9,11 +9,11 @@ from torchvision.ops import box_convert
 import bisect
 import groundingdino
 from groundingdino.models import build_model
-from groundingdino.datasets import transforms as T
 #import groundingdino.datasets.transforms as T
 from groundingdino.util.misc import clean_state_dict
 from groundingdino.util.slconfig import SLConfig
 from groundingdino.util.utils import get_phrases_from_posmap
+from groundingdino.datasets import transforms as T
 
 # ----------------------------------------------------------------------------------------------------------------------
 # OLD API

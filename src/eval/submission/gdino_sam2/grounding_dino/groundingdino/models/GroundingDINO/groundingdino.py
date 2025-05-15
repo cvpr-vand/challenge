@@ -33,9 +33,9 @@ from groundingdino.util.misc import (
     is_dist_avail_and_initialized,
     nested_tensor_from_tensor_list,
 )
-from submission.gdino_sam2.grounding_dino.groundingdino.util.utils import get_phrases_from_posmap
-from submission.gdino_sam2.grounding_dino.groundingdino.util.visualizer import COCOVisualizer
-from submission.gdino_sam2.grounding_dino.groundingdino.util.vl_utils import create_positive_map_from_span
+from groundingdino.util.utils import get_phrases_from_posmap
+from groundingdino.util.visualizer import COCOVisualizer
+from groundingdino.util.vl_utils import create_positive_map_from_span
 
 from ..registry import MODULE_BUILD_FUNCS
 from .backbone import build_backbone
