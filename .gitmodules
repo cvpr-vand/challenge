@@ -1,0 +1,3 @@
+[submodule "gdino_sam2"]
+	path = gdino_sam2
+	url = src/eval/submission/gdino_sam2
