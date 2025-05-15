@@ -89,22 +89,16 @@ class Model(nn.Module):
             print(f"Model saved to {MODEL_PATH}")
         self.model_sam = sam_model_registry["vit_h"](checkpoint=MODEL_PATH).to(self.device)
         self.mask_generator = SamAutomaticMaskGenerator(model=self.model_sam)
+        
+        GROUNDING_MODEL_URL = "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth"
+        GROUNDING_MODEL_PATH = os.path.join(CHECKPOINT_DIR, "groundingdino_swint_ogc.pth")
+        if not os.path.exists(GROUNDING_MODEL_PATH):
+            print("Downloading SAM model...")
+            urlretrieve(GROUNDING_MODEL_URL, GROUNDING_MODEL_PATH)
+        self.grounding_model = load_model('./src/eval/groundingdino/config/GroundingDINO_SwinT_OGC.py', GROUNDING_MODEL_PATH,"cuda")
         # self.grounding_model = load_model('./src/eval/groundingdino/config/GroundingDINO_SwinT_OGC.py', './src/eval/submission/checkpoint/groundingdino_swint_ogc.pth',"cuda")
         
 
-        def load_grounding_model():
-            config_url = "https://huggingface.co/ShilongLiu/GroundingDINO/blob/main/GroundingDINO_SwinT_OGC.cfg.py"
-            checkpoint_url = "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth"
-
-            model = build_model(
-                model_config_path=torch.hub.load_state_dict_from_url(config_url),
-                checkpoint_path=torch.hub.load_state_dict_from_url(checkpoint_url)
-            )
-    
-            model.to("cuda")
-            return model
-
-        self.grounding_model = load_grounding_model()
 
         self.memory_size = 2048
         self.n_neighbors = 2
