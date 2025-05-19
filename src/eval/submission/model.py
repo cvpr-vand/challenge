@@ -293,12 +293,15 @@ class Model(nn.Module):
         # masks = self.mask_generator.generate(raw_image)
         
         # 维护数据库
+        '''
         self.db = TensorDictDB(self.class_name)
         result = self.db.get(raw_image)
         if result:
             print('***Exist in h5!')
             masks = result
         else:
+        '''
+        if True:
             # masks = self.mask_generator.generate(raw_image)
             
             ####
@@ -362,7 +365,7 @@ class Model(nn.Module):
             # groundingSAM_end
             ####
             
-            self.db.add(raw_image, masks)
+            # self.db.add(raw_image, masks)
         time2 = time.time()
         print("sam time:", time2 - time1)
 
