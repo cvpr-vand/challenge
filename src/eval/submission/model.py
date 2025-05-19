@@ -57,7 +57,7 @@ class Model(nn.Module):
         print(output)
         print("torch version:",torch.__version__)
         print("CUDA2!!!!!")
-        
+
 
         #setup_seed(42)
         # NOTE: Create your transformation pipeline (if needed).
