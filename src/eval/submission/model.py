@@ -610,6 +610,9 @@ class Model(nn.Module):
             if len(instance_masks) != 0:
                 instance_masks = np.stack(instance_masks)  # [N, 64x64]
 
+            if sam_patch_hist is  None:
+                sam_patch_hist = np.array([0.0, 0.0,0.0])
+
             return {"score": score, "foreground_pixel_count": foreground_pixel_count, "distance": distance,
                     "sam_patch_hist": sam_patch_hist, "instance_masks": instance_masks}
 
@@ -792,8 +795,6 @@ class Model(nn.Module):
             if not os.path.exists(dir_path):
                 os.mkdir(dir_path)
             image_path = dir_path + '/' + path
-            import pdb
-            pdb.set_trace()
             results = self.histogram(image, cluster_feature, proj_patch_token, class_name, image_path)
             if self.class_name == 'pushpins':
                 patch_token_hist.append(results["clip_patch_hist"])

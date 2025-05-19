@@ -12,7 +12,28 @@ sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/su
 from groundingdino.util.inference import load_model, load_image, predict
 from torchvision import transforms as T
 from PIL import Image
+import requests
 
+def download_weights_with_requests(url, save_path):
+    """
+    使用 requests 下载权重文件
+    
+    参数:
+        url: 下载链接
+        save_path: 保存路径（包含文件名）
+    """
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # 检查请求是否成功
+        
+        with open(save_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print(f"权重文件已下载到: {save_path}")
+    except Exception as e:
+        print(f"下载失败: {e}")
 
 class GSAM2Predictor:
     def __init__(self, ):
@@ -22,6 +43,16 @@ class GSAM2Predictor:
         SAM2_MODEL_CONFIG =  "configs/sam2.1/sam2.1_hiera_l.yaml"
         GROUNDING_DINO_CONFIG = os.path.join(current_dir, "grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py")
         GROUNDING_DINO_CHECKPOINT = os.path.join(current_dir, "gdino_checkpoints/groundingdino_swint_ogc.pth")
+        if not os.path.exists(SAM2_CHECKPOINT):
+            download_weights_with_requests(
+                url="https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt",
+                save_path=SAM2_CHECKPOINT
+            )
+        if not os.path.exists(GROUNDING_DINO_CHECKPOINT):
+            download_weights_with_requests(
+                url="https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth",
+                save_path=GROUNDING_DINO_CHECKPOINT
+            )   
 
         # build SAM2 image predictor
         sam2_checkpoint = SAM2_CHECKPOINT
