@@ -19,7 +19,7 @@ dependencies = [
     "yapf==0.43.0",
     "pycocotools",
     "hf_xet",
-    "transformers==4.45.0"
+    "transformers==4.45.0",
     # TODO: Add your additional dependencies here
 ]
 
