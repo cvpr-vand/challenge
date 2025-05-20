@@ -856,6 +856,9 @@ class Model(nn.Module):
         few_shot_samples = setup_data.get("few_shot_samples")
         class_name = setup_data.get("dataset_category")
         few_shot_paths = setup_data.get("few_shot_samples_path")
+        print("few_shot_samples:", few_shot_samples)
+        print("class_name:", class_name)
+        print("few_shot_paths:", few_shot_paths)
         self.class_name = class_name
 
         self.k_shot = few_shot_samples.size(0)
