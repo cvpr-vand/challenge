@@ -796,8 +796,8 @@ class Model(nn.Module):
             self.anomaly_flag = False
             path = "few_shot_" + os.path.basename(few_shot_path).split('.')[0]
             dir_path = os.path.join('./train/',class_name)
-            if not os.path.exists(dir_path):
-                os.mkdir(dir_path)
+            #if not os.path.exists(dir_path):
+            #    os.mkdir(dir_path)
             image_path = dir_path + '/' + path
             results = self.histogram(image, cluster_feature, proj_patch_token, class_name, image_path)
             if self.class_name == 'pushpins':
@@ -948,8 +948,8 @@ class Model(nn.Module):
         if "structural" in batch_path[0]:
             path = "few_shot_structural_" + os.path.basename(batch_path[0]).split('.')[0]
         dir_path = os.path.join('./test/', self.class_name)
-        if not os.path.exists(dir_path):
-            os.mkdir(dir_path)
+        #if not os.path.exists(dir_path):
+        #    os.mkdir(dir_path)
         image_path = dir_path + '/' + path
 
         time1 = time.time()
