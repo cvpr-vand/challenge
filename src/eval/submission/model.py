@@ -25,7 +25,7 @@ from eval.submission.utils.prompt_ensemble import encode_text_with_prompt_ensemb
 from scipy.optimize import linear_sum_assignment
 import time
 import sys
-sys.path.append('eval/submission/gdino_sam2')
+sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2')
 import sam2
 import grounding_dino
 from grounding_dino import groundingdino
