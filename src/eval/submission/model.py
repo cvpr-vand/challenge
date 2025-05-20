@@ -65,9 +65,15 @@ class Model(nn.Module):
         self.embed_dim = 768
         self.vision_width = 1024
 
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        checkpoint_path = os.path.join(current_dir, "checkpoint", "sam_vit_h_4b8939.pth")
-        self.model_sam = sam_model_registry["vit_h"](checkpoint=checkpoint_path).to(self.device)
+        checkpoint_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth" 
+        self.model_sam = sam_model_registry["vit_h"]()
+        try:
+            state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, progress=True)
+            self.model_sam.load_state_dict(state_dict)
+        except Exception as e:
+            print(f"下载或加载权重失败: {e}")
+            print("请检查网络连接或URL是否正确。")
+        self.model_sam.to(self.device)
         self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
 
         self.memory_size = 2048
