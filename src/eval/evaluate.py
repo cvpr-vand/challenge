@@ -198,8 +198,11 @@ def compute_kshot_metrics(
 
     # Pass few-shot images and dataset category to model's setup method
     few_shot_images = torch.stack([cast(ImageBatch, train_dataset[idx]).image for idx in k_shot_idxs]).to(DEVICE)
+    few_shot_samples_path = [(train_dataset[idx]).image_path for idx in k_shot_idxs]
+    print("path:", few_shot_samples_path)
     setup_data = {
         "few_shot_samples": few_shot_images,
+        "few_shot_samples_path": few_shot_samples_path,
         "dataset_category": train_dataset.category,
     }
     model.setup(setup_data)
@@ -208,7 +211,7 @@ def compute_kshot_metrics(
     model.eval()  # Ensure model is in eval mode
     with torch.no_grad():  # Disable gradient calculations for inference
         for data in tqdm(test_dataloader, desc=f"k={k_shot} Inference", leave=False):
-            output = model(data.image.to(DEVICE))
+            output = model(data.image.to(DEVICE),data.image_path)
             image_metric.update(output.pred_score, data.gt_label.to(DEVICE))
 
     # Compute final metrics
