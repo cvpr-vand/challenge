@@ -52,13 +52,13 @@ class Model(nn.Module):
             ],
         )
        
-        self.model_clip, _, _ = open_clip.create_model_and_transforms(
-            model_name="ViT-L-14",
-            pretrained="/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
-        )
-        self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
-        # self.model_clip, _, _ = open_clip.create_model_and_transforms('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
-        # self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
+        # self.model_clip, _, _ = open_clip.create_model_and_transforms(
+        #     model_name="ViT-L-14",
+        #     pretrained="/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
+        # )
+        # self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
+        self.model_clip, _, _ = open_clip.create_model_and_transforms('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
+        self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
 
 
         self.feature_list = [6, 12, 18, 24]
