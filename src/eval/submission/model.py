@@ -43,7 +43,7 @@ class Model(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-        setup_seed(42)
+        # setup_seed(42)
         # NOTE: Create your transformation pipeline (if needed).
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.transform = v2.Compose(
@@ -155,6 +155,7 @@ class Model(nn.Module):
         self.feature_list_dinov2 = [6, 12, 18, 24]
         self.vision_width_dinov2 = 1024
 
+        current_dir = os.path.dirname(os.path.abspath(__file__))
         pkl_path = os.path.join(current_dir, "memory_bank", "statistic_scores_model_ensemble_few_shot_val.pkl")
         if not os.path.exists(pkl_path):
             raise FileNotFoundError(f"Required model statistics file is missing: {pkl_path}")
