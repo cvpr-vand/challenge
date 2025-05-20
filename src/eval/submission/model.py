@@ -1,4 +1,5 @@
 """Model for submission."""
+
 from anomalib.data import ImageBatch
 import torch
 from torch import nn
@@ -38,8 +39,10 @@ def setup_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
+
 class Model(nn.Module):
     """TODO: Implement your model here"""
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -173,6 +176,7 @@ class Model(nn.Module):
     def set_val(self, val):
         self.validation = val
 
+
     def setup(self, setup_data: dict[str, torch.Tensor]) -> None:
         """Setup the model.
 
@@ -181,6 +185,7 @@ class Model(nn.Module):
         Args:
             setup_data (dict[str, torch.Tensor]): The setup data.
         """
+
         # pass
         few_shot_samples = setup_data.get("few_shot_samples")
         class_name = setup_data.get("dataset_category")
@@ -189,6 +194,7 @@ class Model(nn.Module):
         self.k_shot = few_shot_samples.size(0)
         self.process(class_name, few_shot_samples)
         self.few_shot_inited = True
+
 
     def weights_url(self, category: str) -> str | None:
         """URL to the model weights.
@@ -199,6 +205,7 @@ class Model(nn.Module):
         return None
 
     def forward(self, image: torch.Tensor) -> ImageBatch:
+
         """
         Forward pass of the model.
 
@@ -939,3 +946,4 @@ class Model(nn.Module):
     def process(self, class_name: str, few_shot_samples: list[torch.Tensor]):
         few_shot_samples = self.transform(few_shot_samples).to(self.device)
         scores, self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset = self.process_k_shot(class_name, few_shot_samples)
+
