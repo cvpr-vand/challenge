@@ -494,7 +494,7 @@ class Model(nn.Module):
 
             foreground_pixel_count = 0
             distance = 0
-            sam_patch_hist = 0
+            sam_patch_hist = None
 
             '''
             # erode the cable and divide into left and right parts
@@ -830,6 +830,7 @@ class Model(nn.Module):
         if len(splicing_connectors_distance) != 0:
             self.splicing_connectors_distance = np.mean(splicing_connectors_distance)
         if len(patch_token_hist) != 0:  # patch hist
+            print("patch_token:", patch_token_hist)
             self.patch_token_hist = np.stack(patch_token_hist)
         if len(mem_instance_masks) != 0:
             self.mem_instance_masks = mem_instance_masks
