@@ -43,7 +43,7 @@ class Model(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-        # setup_seed(42)
+        setup_seed(42)
         # NOTE: Create your transformation pipeline (if needed).
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.transform = v2.Compose(
