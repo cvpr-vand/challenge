@@ -87,7 +87,7 @@ class Model(nn.Module):
         # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
         self.mask_generator = SamAutomaticMaskGenerator(
             model=self.model_sam,
-            points_per_side=28,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
+            points_per_side=16,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
             # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
             # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
             # box_nms_thresh=0.7, # 默认。
