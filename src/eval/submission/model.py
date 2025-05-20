@@ -159,7 +159,7 @@ class Model(nn.Module):
 
         self.few_shot_inited = False
 
-        from submission.dinov2.dinov2.hub.backbones import dinov2_vitl14
+        from eval.submission.dinov2.dinov2.hub.backbones import dinov2_vitl14
         self.model_dinov2 = dinov2_vitl14()
         self.model_dinov2.to(self.device)
         self.model_dinov2.eval()
