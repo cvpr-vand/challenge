@@ -26,8 +26,8 @@ CATEGORIES = [
     #"breakfast_box",
     #"juice_bottle",
     #pushpins",
-    "screw_bag",
-    #"splicing_connectors",
+    #"screw_bag",
+    "splicing_connectors",
 ]
 
 

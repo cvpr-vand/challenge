@@ -786,6 +786,7 @@ class Model(nn.Module):
         patch_token_hist = []
         mem_instance_masks = []
 
+        print("few_shot_paths:", few_shot_paths)
 
         for image, cluster_feature, proj_patch_token, few_shot_path in zip(few_shot_samples.chunk(self.k_shot),
                                                                            cluster_features.chunk(self.k_shot),
