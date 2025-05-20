@@ -40,13 +40,15 @@ class GSAM2Predictor:
         DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
         current_dir = os.path.dirname(os.path.abspath(__file__))
         print("current_dir:", current_dir)
-        #SAM2_CHECKPOINT = os.path.join(current_dir, "checkpoints/sam2.1_hiera_large.pt")
-        SAM2_CHECKPOINT = "./checkpoints/sam2.1_hiera_large.pt"
+        SAM2_CHECKPOINT = os.path.join(current_dir, "checkpoints/sam2.1_hiera_large.pt")
+        print("SAM2_CHECKPOINT:", SAM2_CHECKPOINT)
+        #SAM2_CHECKPOINT = "./checkpoints/sam2.1_hiera_large.pt"
         SAM2_MODEL_CONFIG =  "configs/sam2.1/sam2.1_hiera_l.yaml"
-        #GROUNDING_DINO_CONFIG = os.path.join(current_dir, "grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py")
-        GROUNDING_DINO_CONFIG = "./grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py"
-        #GROUNDING_DINO_CHECKPOINT = os.path.join(current_dir, "gdino_checkpoints/groundingdino_swint_ogc.pth")
-        GROUNDING_DINO_CHECKPOINT = "./gdino_checkpoints/groundingdino_swint_ogc.pth"
+        GROUNDING_DINO_CONFIG = os.path.join(current_dir, "grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py")
+        #GROUNDING_DINO_CONFIG = "./grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py"
+        GROUNDING_DINO_CHECKPOINT = os.path.join(current_dir, "gdino_checkpoints/groundingdino_swint_ogc.pth")
+        #GROUNDING_DINO_CHECKPOINT = "./gdino_checkpoints/groundingdino_swint_ogc.pth"
+        print("GROUNDING_DINO_CHECKPOINT:", GROUNDING_DINO_CHECKPOINT)
         if not os.path.exists(SAM2_CHECKPOINT):
             download_weights_with_requests(
                 url="https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt",
