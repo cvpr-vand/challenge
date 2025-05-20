@@ -270,9 +270,9 @@ class Model(nn.Module):
         ###save mask
         for cat_id, mask in enumerate(masks):
             path_rgb = path + "_ori.jpg"
-            pil_img.save(path_rgb)
+            #pil_img.save(path_rgb)
             path_save = path + '_' + str(cat_id) +".jpg"
-            cv2.imwrite(path_save, mask * 255)
+            #cv2.imwrite(path_save, mask * 255)
 
         for pl in pseudo_labels.unique():
             mask = (pseudo_labels == pl).reshape(-1)
