@@ -65,37 +65,16 @@ class Model(nn.Module):
         self.embed_dim = 768
         self.vision_width = 1024
 
-        # --- 策略3：使用更小的SAM模型 ---
-        SAM_MODEL_TYPE = "vit_h" #  "vit_h"、"vit_b"
-        SAM_CHECKPOINT_URL_BASE = "https://dl.fbaipublicfiles.com/segment_anything/"
-        SAM_CHECKPOINTS = {
-            "vit_h": "sam_vit_h_4b8939.pth",
-            "vit_l": "sam_vit_l_0b3195.pth",
-            "vit_b": "sam_vit_b_01ec64.pth",
-        }
-        checkpoint_url = SAM_CHECKPOINT_URL_BASE + SAM_CHECKPOINTS[SAM_MODEL_TYPE]
-        self.model_sam = sam_model_registry[SAM_MODEL_TYPE]()
+        checkpoint_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth" 
+        self.model_sam = sam_model_registry["vit_h"]()
         try:
-            state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, progress=True, map_location=self.device)
+            state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, progress=True)
             self.model_sam.load_state_dict(state_dict)
-            # print(f"Successfully loaded SAM model: {SAM_MODEL_TYPE}")
         except Exception as e:
-            print(f"下载或加载 SAM ({SAM_MODEL_TYPE}) 权重失败: {e}")
-            print("请检查网络连接、URL或本地权重路径是否正确。")
-        self.model_sam.to(self.device).eval()
+            print(f"下载或加载权重失败: {e}")
+            print("请检查网络连接或URL是否正确。")
+        self.model_sam.to(self.device)
         self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
-        # # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
-        self.mask_generator = SamAutomaticMaskGenerator(
-            model=self.model_sam,
-            points_per_side=28,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
-            # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
-            # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
-            # box_nms_thresh=0.7, # 默认。
-            # min_mask_region_area=100,  # 默认 0。设置一个合理的最小面积（例如根据您的目标对象大小）可以过滤掉很多小噪声掩码。
-            # points_per_batch=64, # 默认。如果显存足够，可以尝试增大；如果显存不足，可以减小。对总时间影响可能不大。
-            # crop_n_layers=0, # 默认。 设为0表示不使用裁剪预测，可能会更快。
-            # crop_n_points_downscale_factor=1 # 默认。
-        )
 
         self.memory_size = 2048
         self.n_neighbors = 2
@@ -219,130 +198,123 @@ class Model(nn.Module):
         # TODO: Implement this if you want to download the weights from a URL
         return None
 
-    # def forward(self, image: torch.Tensor) -> ImageBatch:
-    #     """
-    #     Forward pass of the model.
-
-    #     Args:
-    #         image (torch.Tensor): The input image batch of shape [B, 3, H, W].
-
-    #     Returns:
-    #         ImageBatch: The output image batch with prediction scores.
-    #     """
-    #     self.anomaly_flag = False
-
-    #     # Ensure 4D input: [B, 3, H, W]
-    #     if image.ndim == 3:  # single image, [3, H, W]
-    #         image = image.unsqueeze(0)
-
-    #     batch_size = image.shape[0]
-    #     if batch_size > 1:
-    #         raise RuntimeError("out of memory")
-    #     batch = image.clone().detach().to(self.device)
-    #     batch = self.transform(batch)
-
-    #     pred_scores = []
-    #     if self.validation:
-    #         hist_scores = []
-    #         structural_scores = []
-    #         instance_scores = []
-    #         for i in range(batch_size):
-    #             results = self.forward_one_sample(batch[i].unsqueeze(0), self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
-    #             hist_scores.append(results['hist_score'])
-    #             structural_scores.append(results['structural_score'])
-    #             instance_scores.append(results['instance_hungarian_match_score'])
-
-    #         return {
-    #             "hist_score": torch.tensor(hist_scores, device=image.device),
-    #             "structural_score": torch.tensor(structural_scores, device=image.device),
-    #             "instance_hungarian_match_score": torch.tensor(instance_scores, device=image.device),
-    #         }
-
-    #     # Non-validation: perform scoring and sigmoid
-    #     def sigmoid(z):
-    #         return 1 / (1 + np.exp(-z))
-
-    #     for i in range(batch_size):
-    #         results = self.forward_one_sample(batch[i].unsqueeze(0), self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
-
-    #         hist_score = results['hist_score']
-    #         structural_score = results['structural_score']
-    #         instance_hungarian_match_score = results['instance_hungarian_match_score']
-
-    #         # standardization
-    #         standard_structural_score = (
-    #             structural_score - self.stats[self.class_name]["structural_scores"]["mean"]
-    #         ) / self.stats[self.class_name]["structural_scores"]["unbiased_std"]
-    #         standard_instance_hungarian_match_score = (
-    #             instance_hungarian_match_score - self.stats[self.class_name]["instance_hungarian_match_scores"]["mean"]
-    #         ) / self.stats[self.class_name]["instance_hungarian_match_scores"]["unbiased_std"]
-
-    #         pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
-    #         pred_score = sigmoid(pred_score)
-
-    #         if self.anomaly_flag:
-    #             pred_score = 1.0
-    #             self.anomaly_flag = False
-
-    #         pred_scores.append(pred_score)
-
-    #     return ImageBatch(
-    #         image=image,
-    #         pred_score=torch.tensor(pred_scores, device=image.device),
-    #     )
-
-
     def forward(self, image: torch.Tensor) -> ImageBatch:
-        """Forward pass of the model.
+        """
+        Forward pass of the model.
 
         Args:
-            image (torch.Tensor): The input image.
+            image (torch.Tensor): The input image batch of shape [B, 3, H, W].
 
         Returns:
-            ImageBatch: The output image batch.
+            ImageBatch: The output image batch with prediction scores.
         """
-        # TODO: Implement the forward pass of the model.
+        self.anomaly_flag = False
+
         # Ensure 4D input: [B, 3, H, W]
         if image.ndim == 3:  # single image, [3, H, W]
             image = image.unsqueeze(0)
-        batch_size = image.shape[0]
-        if batch_size > 1:
-            raise RuntimeError("OOM")
 
-        self.anomaly_flag = False
+        batch_size = image.shape[0]
         batch = image.clone().detach().to(self.device)
         batch = self.transform(batch)
-        results = self.forward_one_sample(batch, self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
 
-        hist_score = results['hist_score']
-        structural_score = results['structural_score']
-        instance_hungarian_match_score = results['instance_hungarian_match_score']
-
-        anomaly_map_structural = results['anomaly_map_structural']
-
+        pred_scores = []
         if self.validation:
-            return {"hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score), "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
+            hist_scores = []
+            structural_scores = []
+            instance_scores = []
+            for i in range(batch_size):
+                results = self.forward_one_sample(batch[i].unsqueeze(0), self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
+                hist_scores.append(results['hist_score'])
+                structural_scores.append(results['structural_score'])
+                instance_scores.append(results['instance_hungarian_match_score'])
 
+            return {
+                "hist_score": torch.tensor(hist_scores, device=image.device),
+                "structural_score": torch.tensor(structural_scores, device=image.device),
+                "instance_hungarian_match_score": torch.tensor(instance_scores, device=image.device),
+            }
+
+        # Non-validation: perform scoring and sigmoid
         def sigmoid(z):
-            return 1/(1 + np.exp(-z))
-        
-        # standardization
-        standard_structural_score = (structural_score - self.stats[self.class_name]["structural_scores"]["mean"]) / self.stats[self.class_name]["structural_scores"]["unbiased_std"]
-        standard_instance_hungarian_match_score = (instance_hungarian_match_score - self.stats[self.class_name]["instance_hungarian_match_scores"]["mean"]) / self.stats[self.class_name]["instance_hungarian_match_scores"]["unbiased_std"]
- 
-        pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
-        pred_score = sigmoid(pred_score)
-        
-        if self.anomaly_flag:
-            pred_score = 1.
-            self.anomaly_flag = False
+            return 1 / (1 + np.exp(-z))
 
-        # return {"pred_score": torch.tensor(pred_score), "anomaly_map": torch.tensor(anomaly_map_structural), "hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score), "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
+        for i in range(batch_size):
+            results = self.forward_one_sample(batch[i].unsqueeze(0), self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
+
+            hist_score = results['hist_score']
+            structural_score = results['structural_score']
+            instance_hungarian_match_score = results['instance_hungarian_match_score']
+
+            # standardization
+            standard_structural_score = (
+                structural_score - self.stats[self.class_name]["structural_scores"]["mean"]
+            ) / self.stats[self.class_name]["structural_scores"]["unbiased_std"]
+            standard_instance_hungarian_match_score = (
+                instance_hungarian_match_score - self.stats[self.class_name]["instance_hungarian_match_scores"]["mean"]
+            ) / self.stats[self.class_name]["instance_hungarian_match_scores"]["unbiased_std"]
+
+            pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+            pred_score = sigmoid(pred_score)
+
+            if self.anomaly_flag:
+                pred_score = 1.0
+                self.anomaly_flag = False
+
+            pred_scores.append(pred_score)
 
         return ImageBatch(
             image=image,
-            pred_score=torch.tensor(pred_score).to(image.device),
+            pred_score=torch.tensor(pred_scores, device=image.device),
         )
+
+
+    # def forward(self, image: torch.Tensor) -> ImageBatch:
+    #     """Forward pass of the model.
+
+    #     Args:
+    #         image (torch.Tensor): The input image.
+
+    #     Returns:
+    #         ImageBatch: The output image batch.
+    #     """
+    #     # TODO: Implement the forward pass of the model.
+    #     batch_size = image.shape[0]
+
+    #     self.anomaly_flag = False
+    #     batch = image.clone().detach().to(self.device)
+    #     batch = self.transform(batch)
+    #     results = self.forward_one_sample(batch, self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
+
+    #     hist_score = results['hist_score']
+    #     structural_score = results['structural_score']
+    #     instance_hungarian_match_score = results['instance_hungarian_match_score']
+
+    #     anomaly_map_structural = results['anomaly_map_structural']
+
+    #     if self.validation:
+    #         return {"hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score), "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
+
+    #     def sigmoid(z):
+    #         return 1/(1 + np.exp(-z))
+        
+    #     # standardization
+    #     standard_structural_score = (structural_score - self.stats[self.class_name]["structural_scores"]["mean"]) / self.stats[self.class_name]["structural_scores"]["unbiased_std"]
+    #     standard_instance_hungarian_match_score = (instance_hungarian_match_score - self.stats[self.class_name]["instance_hungarian_match_scores"]["mean"]) / self.stats[self.class_name]["instance_hungarian_match_scores"]["unbiased_std"]
+ 
+    #     pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+    #     pred_score = sigmoid(pred_score)
+        
+    #     if self.anomaly_flag:
+    #         pred_score = 1.
+    #         self.anomaly_flag = False
+
+    #     # return {"pred_score": torch.tensor(pred_score), "anomaly_map": torch.tensor(anomaly_map_structural), "hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score), "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
+
+    #     return ImageBatch(
+    #         image=image,
+    #         pred_score=torch.tensor(pred_score).to(image.device),
+    #     )
     
     def forward_one_sample(self, batch: torch.Tensor, mem_patch_feature_clip_coreset: torch.Tensor, mem_patch_feature_dinov2_coreset: torch.Tensor, path: str = ""):
         batch = F.interpolate(batch, size=(448, 448), mode=self.inter_mode, align_corners=self.align_corners, antialias=self.antialias)
@@ -508,32 +480,6 @@ class Model(nn.Module):
         height, width = raw_image.shape[:2]
         masks = self.mask_generator.generate(raw_image)
         # self.predictor.set_image(raw_image)
-
-        # # --- 策略1：降低SAM输入分辨率 ---
-        # original_height, original_width = raw_image.shape[:2]
-        # # 设定一个较低的目标尺寸给SAM，例如原始尺寸的一半或固定值
-        # SAM_TARGET_SIZE_H = original_height // 2
-        # SAM_TARGET_SIZE_W = original_width // 2
-
-        # # 使用 cv2.resize 调整图像大小，INTER_AREA 通常用于缩小图像
-        # raw_image_for_sam = cv2.resize(raw_image, (SAM_TARGET_SIZE_W, SAM_TARGET_SIZE_H), interpolation=cv2.INTER_AREA)
-
-        # # 使用缩小后的图像生成掩码
-        # # 确保 self.mask_generator 已经初始化
-        # masks_low_res = self.mask_generator.generate(raw_image_for_sam)
-
-        # # 对 SAM 生成的掩码进行处理 plot_results_only 返回一个在低分辨率下的实例分割图 (例如，每个对象一个唯一ID)
-        # if masks_low_res:
-        #     sorted_masks_low_res = sorted(masks_low_res, key=(lambda x: x['area']), reverse=True)
-        #     # 在低分辨率下创建实例图
-        #     sam_instance_map_low_res = plot_results_only(sorted_masks_low_res) # 假设 plot_results_only 返回的是 H_low x W_low 的图
-        #     # 将低分辨率的实例分割图上采样回原始图像尺寸
-        #     # 使用 INTER_NEAREST 来保持掩码的离散标签性质，避免模糊
-        #     sam_mask = cv2.resize(sam_instance_map_low_res.astype(np.uint8), # astype很重要，resize需要数值类型
-        #                         (original_width, original_height), 
-        #                         interpolation=cv2.INTER_NEAREST).astype(int)
-        # else:
-        #     sam_mask = np.zeros((original_height, original_width), dtype=int)
         
         kmeans_label = pseudo_labels.view(self.feat_size, self.feat_size).cpu().numpy()
         kmeans_mask = kmeans_mask.view(self.feat_size, self.feat_size).cpu().numpy()
@@ -617,9 +563,6 @@ class Model(nn.Module):
         
         elif self.class_name == 'splicing_connectors':
             #  object count hist for default
-            # # --- 策略1：降低SAM输入分辨率 ---
-            # largest_mask_high_res_bool = (sam_mask == 1)
-            # sam_mask_max_area = largest_mask_high_res_bool # background
             sam_mask_max_area = sorted_masks[0]['segmentation'] # background
             binary = (sam_mask_max_area == 0).astype(np.uint8) # sam_mask_max_area is background,  background 0 foreground 1
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
