@@ -307,7 +307,7 @@ class Model(nn.Module):
             image = image.unsqueeze(0)
         batch_size = image.shape[0]
         if batch_size > 1:
-            raise RuntimeError("OOM")
+            raise RuntimeError("out of memory")
 
         self.anomaly_flag = False
         batch = image.clone().detach().to(self.device)
