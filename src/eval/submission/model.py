@@ -25,7 +25,11 @@ from eval.submission.utils.prompt_ensemble import encode_text_with_prompt_ensemb
 from scipy.optimize import linear_sum_assignment
 import time
 import sys
-sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2')
+import os
+dir_path = os.path.dirname(os.path.abspath(__file__))
+cur_path = os.path.join(dir_path, "gdino_sam2")
+#sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2')
+sys.path.append(cur_path)
 import sam2
 import grounding_dino
 from grounding_dino import groundingdino
