@@ -8,7 +8,7 @@ dependencies = [
     "anomalib[full]",
     "scikit-learn",
     # TODO: Add your additional dependencies here
-    "kmeans-pytorch==0.3"
+    "kmeans-pytorch==0.3",
 ]
 
 [tool.uv.sources]
