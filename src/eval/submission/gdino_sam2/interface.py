@@ -7,7 +7,7 @@ from torchvision.ops import box_convert
 from eval.submission.gdino_sam2.sam2.build_sam import build_sam2
 from eval.submission.gdino_sam2.sam2.sam2_image_predictor import SAM2ImagePredictor
 import sys
-sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2/grounding_dino')
+sys.path.append('eval/submission/gdino_sam2/grounding_dino')
 #from eval.submission.gdino_sam2.grounding_dino.groundingdino.util.inference import load_model, load_image, predict
 from groundingdino.util.inference import load_model, load_image, predict
 from torchvision import transforms as T
@@ -39,10 +39,14 @@ class GSAM2Predictor:
     def __init__(self, ):
         DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        SAM2_CHECKPOINT = os.path.join(current_dir, "checkpoints/sam2.1_hiera_large.pt")
+        print("current_dir:", current_dir)
+        #SAM2_CHECKPOINT = os.path.join(current_dir, "checkpoints/sam2.1_hiera_large.pt")
+        SAM2_CHECKPOINT = "./checkpoints/sam2.1_hiera_large.pt"
         SAM2_MODEL_CONFIG =  "configs/sam2.1/sam2.1_hiera_l.yaml"
-        GROUNDING_DINO_CONFIG = os.path.join(current_dir, "grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py")
-        GROUNDING_DINO_CHECKPOINT = os.path.join(current_dir, "gdino_checkpoints/groundingdino_swint_ogc.pth")
+        #GROUNDING_DINO_CONFIG = os.path.join(current_dir, "grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py")
+        GROUNDING_DINO_CONFIG = "./grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py"
+        #GROUNDING_DINO_CHECKPOINT = os.path.join(current_dir, "gdino_checkpoints/groundingdino_swint_ogc.pth")
+        GROUNDING_DINO_CHECKPOINT = "./gdino_checkpoints/groundingdino_swint_ogc.pth"
         if not os.path.exists(SAM2_CHECKPOINT):
             download_weights_with_requests(
                 url="https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt",
