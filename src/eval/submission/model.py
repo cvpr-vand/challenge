@@ -83,8 +83,8 @@ class Model(nn.Module):
             print(f"下载或加载 SAM ({SAM_MODEL_TYPE}) 权重失败: {e}")
             print("请检查网络连接、URL或本地权重路径是否正确。")
         self.model_sam.to(self.device).eval()
-        self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
-        # # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
+        # self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
+        # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
         self.mask_generator = SamAutomaticMaskGenerator(
             model=self.model_sam,
             points_per_side=28,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
