@@ -60,6 +60,8 @@ from .models.segment_anything import (
     SamPredictor,
 )
 
+from urllib.request import urlretrieve
+
 class LinearLayer(nn.Module):
     def __init__(self):
         super(LinearLayer, self).__init__()
@@ -169,9 +171,10 @@ class Model(nn.Module):
         super().__init__(*args, **kwargs)
 
         if not os.path.exists("./src/eval/submission/ckpts/sam_hq_vit_h.pth"):
-
-            subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_h.pth"], check=True)
-
+            urlretrieve(  # noqa: S310  # nosec B310
+                    url="https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_h.pth",
+                    filename="./src/eval/submission/ckpts/sam_hq_vit_h.pth",
+                )
 
         clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
         self.image_size = 224
