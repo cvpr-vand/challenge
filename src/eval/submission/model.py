@@ -143,6 +143,7 @@ def infer_dino(img, queries, box_threshold, text_threshold, area_threshold, dino
     for result in results:
         filtered_boxes = []
         filtered_labels = []
+        filtered_scores = []
         
         for i, box in enumerate(result["boxes"]):
             # 计算框的面积
@@ -154,10 +155,13 @@ def infer_dino(img, queries, box_threshold, text_threshold, area_threshold, dino
             if box_area / img_area < area_threshold:
                 filtered_boxes.append(box)
                 filtered_labels.append(result["labels"][i])
+                filtered_scores.append(result["scores"][i])
         
         filtered_result = {
             "boxes": torch.stack(filtered_boxes) if filtered_boxes else torch.zeros((0, 4)),
-            "labels": filtered_labels
+            "labels": filtered_labels,
+            "scores": filtered_scores,
+
         }
         filtered_results.append(filtered_result)
     
@@ -234,7 +238,10 @@ class Model(nn.Module):
             self.device,
         )
 
-        boxes_filt, pred_phrases = grounding_output[0]["boxes"], grounding_output[0]["labels"]
+        boxes_filt, pred_phrases, scores = grounding_output[0]["boxes"], grounding_output[0]["labels"], grounding_output[0]["scores"]
+
+        for i in range(len(pred_phrases)):
+            pred_phrases[i] = pred_phrases[i] + f"({scores[i]:.2f})"
 
         background_box = list()
         for i,text in enumerate(pred_phrases):
