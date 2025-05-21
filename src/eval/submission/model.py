@@ -25,6 +25,8 @@ import importlib
 import site
 import os
 
+subprocess.run(["uv", "pip", "install", "torch==2.6.0", "torchvision==0.21.0","torchaudio==2.6.0", "--index-url", "https://download.pytorch.org/whl/cu116"],)
+
 subprocess.run(["uv", "pip", "install", "--no-build-isolation", "-e","./src/eval/submission/models/GroundingDINO",],)
 # Grounding DINO
 # 方法 1: 刷新 site-packages 路径
