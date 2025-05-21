@@ -20,6 +20,22 @@ from .models import clip as open_clip
 import os
 from torchvision.transforms.v2.functional import resize, crop, rotate, InterpolationMode
 
+import sys
+import importlib
+import site
+import os
+
+subprocess.run(["uv", "pip", "install", "--no-build-isolation", "-e","./src/eval/submission/models/GroundingDINO",],)
+# Grounding DINO
+# 方法 1: 刷新 site-packages 路径
+importlib.reload(site)
+sys.path = list(site.getsitepackages()) + sys.path
+
+# 方法 2: 直接添加包路径（如果方法 1 不起作用）
+groundingdino_path = os.path.abspath("./src/eval/submission/models/GroundingDINO")
+if groundingdino_path not in sys.path:
+    sys.path.insert(0, groundingdino_path)
+    
 
 from .models.component_segmentaion import (
     split_masks_from_one_mask,
@@ -50,22 +66,7 @@ from .models.component_segmentaion import (
 
 )
 
-import sys
-import importlib
-import site
-import os
 
-subprocess.run(["uv", "pip", "install", "--no-build-isolation", "-e","./src/eval/submission/models/GroundingDINO",],)
-# Grounding DINO
-# 方法 1: 刷新 site-packages 路径
-importlib.reload(site)
-sys.path = list(site.getsitepackages()) + sys.path
-
-# 方法 2: 直接添加包路径（如果方法 1 不起作用）
-groundingdino_path = os.path.abspath("./src/eval/submission/models/GroundingDINO")
-if groundingdino_path not in sys.path:
-    sys.path.insert(0, groundingdino_path)
-    
 
 from matplotlib import pyplot as plt
 from PIL import Image
