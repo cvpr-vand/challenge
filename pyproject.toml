@@ -20,8 +20,7 @@ dependencies = [
     "yapf",
     "segment_anything",
     "segment-anything-hq",
-    "prefetch_generator",
-    "groundingdino @ file:///home/user/src/eval/submission/models/GroundingDINO"
+    "prefetch_generator"
     # TODO: Add your additional dependencies here
 ]
 

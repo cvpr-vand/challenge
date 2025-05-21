@@ -50,6 +50,23 @@ from .models.component_segmentaion import (
 
 )
 
+import sys
+import importlib
+import site
+import os
+
+subprocess.run(["uv", "pip", "install", "--no-build-isolation", "-e","./src/eval/submission/models/GroundingDINO",],)
+# Grounding DINO
+# 方法 1: 刷新 site-packages 路径
+importlib.reload(site)
+sys.path = list(site.getsitepackages()) + sys.path
+
+# 方法 2: 直接添加包路径（如果方法 1 不起作用）
+groundingdino_path = os.path.abspath("./src/eval/submission/models/GroundingDINO")
+if groundingdino_path not in sys.path:
+    sys.path.insert(0, groundingdino_path)
+    
+
 from matplotlib import pyplot as plt
 from PIL import Image
 from enum import Enum
@@ -126,11 +143,13 @@ class Model(nn.Module):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_h.pth"], check=True)
+        if not os.path.exists("./src/eval/submission/ckpts/sam_hq_vit_h.pth"):
 
-        subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha2/groundingdino_swinb_cogcoor.pth"], check=True)
+            subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_h.pth"], check=True)
 
-        subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth"], check=True)
+            subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha2/groundingdino_swinb_cogcoor.pth"], check=True)
+
+            subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth"], check=True)
 
 
 
@@ -182,6 +201,7 @@ class Model(nn.Module):
 
 
     def grounding_segmentation(self, image_path, mask_path, grounding_config):
+        os.makedirs(f"{mask_path}",exist_ok=True)
         image_pil, image = load_image(image_path)
         boxes_filt, pred_phrases = get_grounding_output(
             self.grounding_model, image, grounding_config["text_prompt"], grounding_config['box_threshold'], grounding_config['text_threshold'], device="cuda", area_thr = grounding_config['area_threshold']
@@ -212,6 +232,7 @@ class Model(nn.Module):
                 refined_masks = np.zeros((256,256), dtype=np.uint8)
 
             cv2.imwrite(f"{mask_path}/refined_masks.png",refined_masks)
+
             with open(f"{mask_path}/pred_phrases.json", 'w', encoding='utf-8') as f:
                 json.dump(pred_phrases, f, ensure_ascii=False, indent=4)
 
@@ -258,7 +279,6 @@ class Model(nn.Module):
                     masks = filter_masks_below_area(masks, 200)
                 masks = merge_masks(masks, reverse=True)
 
-            os.makedirs(f"{mask_path}",exist_ok=True)
             cv2.imwrite(f"{mask_path}/grounding_mask.png",masks)
 
 
