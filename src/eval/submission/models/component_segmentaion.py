@@ -25,7 +25,6 @@ import tqdm
 import os
 import glob
 import random
-from .component_feature_extractor import ComponentFeatureExtractor
 import sklearn.cluster
 from skimage import measure, morphology
 
