@@ -146,7 +146,7 @@ class Model(nn.Module):
         self.clip_model.eval()
 
         self.dinov2_net = torch.hub.load(
-            "src/eval/submission/models/dinov2", "dinov2_vitg14", pretrained=True, source="local"
+            'facebookresearch/dinov2', "dinov2_vitg14"
         ).to(device)
 
 
