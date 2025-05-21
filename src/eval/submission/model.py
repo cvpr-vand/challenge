@@ -243,12 +243,13 @@ class Model(nn.Module):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.sam_predictor.set_image(image)
 
-        size = image_pil.size
-        H, W = size[1], size[0]
-        for i in range(boxes_filt.size(0)):
-            boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
-            boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
-            boxes_filt[i][2:] += boxes_filt[i][:2]
+        # size = image_pil.size
+        # H, W = size[1], size[0]
+        # for i in range(boxes_filt.size(0)):
+        #     boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
+        #     boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
+        #     boxes_filt[i][2:] += boxes_filt[i][:2]
+        boxes_filt = boxes_filt.cpu()
 
         if boxes_filt.size(0) == 0:
 
