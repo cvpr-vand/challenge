@@ -20,25 +20,9 @@ from .models import clip as open_clip
 import os
 from torchvision.transforms.v2.functional import resize, crop, rotate, InterpolationMode
 
-import sys
-import importlib
-import site
-import os
+from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
-subprocess.run(["uv", "pip", "install", "torch==2.6.0", "torchvision==0.21.0","torchaudio==2.6.0", "--index-url", "https://download.pytorch.org/whl/cu116"],)
-
-subprocess.run(["uv", "pip", "install", "--no-build-isolation", "-e","./src/eval/submission/models/GroundingDINO",],)
-# Grounding DINO
-# 方法 1: 刷新 site-packages 路径
-importlib.reload(site)
-sys.path = list(site.getsitepackages()) + sys.path
-
-# 方法 2: 直接添加包路径（如果方法 1 不起作用）
-groundingdino_path = os.path.abspath("./src/eval/submission/models/GroundingDINO")
-if groundingdino_path not in sys.path:
-    sys.path.insert(0, groundingdino_path)
     
-
 from .models.component_segmentaion import (
     split_masks_from_one_mask,
     split_masks_from_one_mask_sort,
@@ -68,22 +52,8 @@ from .models.component_segmentaion import (
 
 )
 
-
-
-from matplotlib import pyplot as plt
 from PIL import Image
-from enum import Enum
 
-# Grounding DINO
-from .models.grounded_sam import (
-    load_image,
-    load_model,
-    get_grounding_output,
-    show_box,
-    show_mask,
-)
-
-import csv
 
 from .models.segment_anything import (
     sam_hq_model_registry,
@@ -141,6 +111,58 @@ def save_tensor_as_jpg(tensor_images, save_dir="saved_images", class_name=None):
 
         cv2.imwrite(f"{save_dir}/image_{i}.jpg", data)
 
+def load_image(image_path):
+    # load image
+    image_pil = Image.open(image_path).convert("RGB")  # load image
+    return image_pil, None
+
+def infer_dino(img, queries, box_threshold, text_threshold, area_threshold, dino_model, dino_processor, device):
+    
+    width, height = img.size[:2]
+    img_area = width * height
+
+    target_sizes = [(width, height)]
+    inputs = dino_processor(text=queries, images=img, return_tensors="pt").to(device)
+
+    with torch.no_grad():
+        outputs = dino_model(**inputs)
+        outputs.logits = outputs.logits.cpu()
+        outputs.pred_boxes = outputs.pred_boxes.cpu()
+        results = dino_processor.post_process_grounded_object_detection(
+            outputs=outputs,
+            input_ids=inputs.input_ids,
+            threshold=box_threshold,
+            text_threshold=text_threshold,
+            target_sizes=target_sizes,
+        )
+    
+    # 过滤掉面积过大的检测框
+    filtered_results = []
+    for result in results:
+        filtered_boxes = []
+        filtered_labels = []
+        
+        for i, box in enumerate(result["boxes"]):
+            # 计算框的面积
+            box_width = box[2] - box[0]
+            box_height = box[3] - box[1]
+            box_area = box_width * box_height
+            
+            # 如果框的面积小于整张图像的80%，保留
+            if box_area / img_area < area_threshold:
+                filtered_boxes.append(box)
+                filtered_labels.append(result["labels"][i])
+        
+        filtered_result = {
+            "boxes": torch.stack(filtered_boxes) if filtered_boxes else torch.zeros((0, 4)),
+            "labels": filtered_labels
+        }
+        filtered_results.append(filtered_result)
+    
+    return filtered_results
+
+
+
 class Model(nn.Module):
 
     def __init__(self, *args, **kwargs) -> None:
@@ -149,11 +171,6 @@ class Model(nn.Module):
         if not os.path.exists("./src/eval/submission/ckpts/sam_hq_vit_h.pth"):
 
             subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_h.pth"], check=True)
-
-            subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha2/groundingdino_swinb_cogcoor.pth"], check=True)
-
-            subprocess.run(["wget","-P", "./src/eval/submission/ckpts", "-q","https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth"], check=True)
-
 
 
         clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
@@ -194,21 +211,27 @@ class Model(nn.Module):
 
         self.decoder = LinearLayer()
 
-        self.grounding_model = load_model(
-            "src/eval/submission/models/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
-            "src/eval/submission/ckpts/groundingdino_swinb_cogcoor.pth",
-            "cuda",
-        )
         sam = sam_hq_model_registry["vit_h"]("src/eval/submission/ckpts/sam_hq_vit_h.pth").to(device)
         self.sam_predictor = SamPredictor(sam)
 
 
     def grounding_segmentation(self, image_path, mask_path, grounding_config):
         os.makedirs(f"{mask_path}",exist_ok=True)
-        image_pil, image = load_image(image_path)
-        boxes_filt, pred_phrases = get_grounding_output(
-            self.grounding_model, image, grounding_config["text_prompt"], grounding_config['box_threshold'], grounding_config['text_threshold'], device="cuda", area_thr = grounding_config['area_threshold']
+
+        image_pil, _ = load_image(image_path)
+
+        grounding_output = infer_dino(
+            image_pil,
+            grounding_config["text_prompt"],
+            grounding_config["box_threshold"],
+            grounding_config["text_threshold"],
+            grounding_config["area_threshold"],
+            self.grounding_model,
+            self.grounding_processor,
+            self.device,
         )
+
+        boxes_filt, pred_phrases = grounding_output[0]["boxes"], grounding_output[0]["labels"]
 
         background_box = list()
         for i,text in enumerate(pred_phrases):
@@ -253,11 +276,6 @@ class Model(nn.Module):
                 multimask_output = False,
             )
 
-            plt.clf()
-            plt.imshow(image)
-            for box, label in zip(boxes_filt, pred_phrases):
-                show_box(box.numpy(), plt.gca(), label)
-            plt.axis('off')
 
             if len(background_box) != 0:
                 backgrounds = torch.stack([masks[i] for i in background_box])
@@ -332,11 +350,13 @@ class Model(nn.Module):
         self.shot = len(few_shot_samples)
 
         if self.class_name in ["breakfast_box", "juice_bottle"]:
-            self.grounding_model = load_model(
-            "src/eval/submission/models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
-            "src/eval/submission/ckpts/groundingdino_swint_ogc.pth",
-            "cuda",
-        )
+            grounding_model_id = "IDEA-Research/grounding-dino-tiny"
+        else:
+            grounding_model_id = "IDEA-Research/grounding-dino-base"
+
+        self.grounding_processor = AutoProcessor.from_pretrained(grounding_model_id)
+        self.grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(grounding_model_id).to(self.device)
+        
 
         self.sampler = GreedyCoresetSampler(percentage= 0.99 / self.shot, device=self.device)
         

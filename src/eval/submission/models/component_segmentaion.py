@@ -1,38 +1,12 @@
 import numpy as np
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
-# segment anything
-from .segment_anything import (
-    sam_model_registry,
-    sam_hq_model_registry,
-    SamPredictor,
-    SamAutomaticMaskGenerator
-)
-# Grounding DINO
-from .grounded_sam import (
-    load_image,
-    load_model,
-    get_grounding_output,
-    show_box,
-    show_mask
-)
 
-
-from skimage import measure
 from skimage import morphology, measure
 import tqdm
-import os
-import glob
-import random
-import sklearn.cluster
-from skimage import measure, morphology
 
-import scipy.stats
 import torch
-from PIL import Image
 import yaml
-import time
 from scipy import ndimage
 
 def read_config(config_path):
@@ -584,85 +558,6 @@ def filter_by_combine(masks):
                 combine_masks = np.logical_or(combine_masks,mask)
                 result_masks.append(mask)
     return result_masks
-
-def grounding_segmentation(img_paths,save_path,config):
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    box_threshold = config['box_threshold']
-    text_threshold = config['text_threshold']
-    text_prompt = config['text_prompt']
-
-    model = load_model('./models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py',
-                       './pretrained_ckpts/groundingdino_swint_ogc.pth',"cuda")
-    sam = sam_hq_model_registry['vit_h']('./pretrained_ckpts/sam_hq_vit_h.pth').to(device)
-    predictor = SamPredictor(sam)
-
-    for image_path in tqdm.tqdm(img_paths,desc="grounding..."):
-        # print(image_path)
-        image_pil, image = load_image(image_path)
-        boxes_filt, pred_phrases = get_grounding_output(
-            model, image, text_prompt, box_threshold, text_threshold, device="cuda"
-        )
-
-        background_box = list()
-        for i,text in enumerate(pred_phrases):
-            for j in config['background_prompt'].split('.'):
-                if j in text.replace(' - ','-') and j != ' ' and j != '':
-                    background_box.append(i)
-
-        image = cv2.imread(image_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        predictor.set_image(image)
-
-        size = image_pil.size
-        H, W = size[1], size[0]
-        for i in range(boxes_filt.size(0)):
-            boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
-            boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
-            boxes_filt[i][2:] += boxes_filt[i][:2]
-
-        boxes_filt = boxes_filt.cpu()
-
-        transformed_boxes = predictor.transform.apply_boxes_torch(boxes_filt, image.shape[:2]).to(device)
-
-        masks, _, _ = predictor.predict_torch(
-            point_coords = None,
-            point_labels = None,
-            boxes = transformed_boxes.to(device),
-            multimask_output = False,
-        )
-
-        if len(background_box) != 0:
-            backgrounds = torch.stack([masks[i] for i in background_box])
-            background = torch.sum(backgrounds,dim=0).squeeze().cpu().numpy()
-            background = np.where(background!=0,255,0).astype(np.uint8)
-        else:
-            background = np.zeros_like(masks[0][0].cpu().numpy()).astype(np.uint8)
-
-        masks = torch.stack([masks[i] for i in range(len(masks)) if i not in background_box])
-        masks = turn_binary_to_int(masks[:,0,:,:].cpu().numpy())
-        color_mask = color_masks(masks)
-        masks = merge_masks(masks)
-        image_name = '/'.join((image_path.split(".")[-2]).split("/")[-3:])
-        os.makedirs(f"{save_path}/{image_name}",exist_ok=True)
-        cv2.imwrite(f"{save_path}/{image_name}/grounding_mask.png",masks)
-        cv2.imwrite(f"{save_path}/{image_name}/grounding_background.png",background)
-        cv2.imwrite(f"{save_path}/{image_name}/grounding_mask_color.png",color_mask)
-
-
-        # refined_masks = cv2.imread(f"{save_path}/{image_name}/grounding_mask.png",cv2.IMREAD_GRAYSCALE)
-        refined_masks = split_masks_from_one_mask(masks)
-        if len(refined_masks) > 0:
-            refined_masks = split_masks_by_connected_component(refined_masks)
-        if len(refined_masks) > 0:
-            refined_masks = filter_by_combine(refined_masks)
-        refined_masks_color = color_masks(refined_masks)
-        if len(refined_masks) > 0:
-            refined_masks = merge_masks(refined_masks)
-
-        cv2.imwrite(f"{save_path}/{image_name}/refined_masks.png",refined_masks)
-        cv2.imwrite(f"{save_path}/{image_name}/refined_masks_color.png",refined_masks_color)
-
 
 
 def segmentation(img_paths,save_path,use_grounding_filter=False,no_sam=True):
