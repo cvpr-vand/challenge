@@ -87,7 +87,7 @@ class Model(nn.Module):
         # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
         self.mask_generator = SamAutomaticMaskGenerator(
             model=self.model_sam,
-            points_per_side=16,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
+            points_per_side=8,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
             # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
             # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
             # box_nms_thresh=0.7, # 默认。
@@ -219,130 +219,128 @@ class Model(nn.Module):
         # TODO: Implement this if you want to download the weights from a URL
         return None
 
-    # def forward(self, image: torch.Tensor) -> ImageBatch:
-    #     """
-    #     Forward pass of the model.
-
-    #     Args:
-    #         image (torch.Tensor): The input image batch of shape [B, 3, H, W].
-
-    #     Returns:
-    #         ImageBatch: The output image batch with prediction scores.
-    #     """
-    #     self.anomaly_flag = False
-
-    #     # Ensure 4D input: [B, 3, H, W]
-    #     if image.ndim == 3:  # single image, [3, H, W]
-    #         image = image.unsqueeze(0)
-
-    #     batch_size = image.shape[0]
-    #     if batch_size > 1:
-    #         raise RuntimeError("out of memory")
-    #     batch = image.clone().detach().to(self.device)
-    #     batch = self.transform(batch)
-
-    #     pred_scores = []
-    #     if self.validation:
-    #         hist_scores = []
-    #         structural_scores = []
-    #         instance_scores = []
-    #         for i in range(batch_size):
-    #             results = self.forward_one_sample(batch[i].unsqueeze(0), self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
-    #             hist_scores.append(results['hist_score'])
-    #             structural_scores.append(results['structural_score'])
-    #             instance_scores.append(results['instance_hungarian_match_score'])
-
-    #         return {
-    #             "hist_score": torch.tensor(hist_scores, device=image.device),
-    #             "structural_score": torch.tensor(structural_scores, device=image.device),
-    #             "instance_hungarian_match_score": torch.tensor(instance_scores, device=image.device),
-    #         }
-
-    #     # Non-validation: perform scoring and sigmoid
-    #     def sigmoid(z):
-    #         return 1 / (1 + np.exp(-z))
-
-    #     for i in range(batch_size):
-    #         results = self.forward_one_sample(batch[i].unsqueeze(0), self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
-
-    #         hist_score = results['hist_score']
-    #         structural_score = results['structural_score']
-    #         instance_hungarian_match_score = results['instance_hungarian_match_score']
-
-    #         # standardization
-    #         standard_structural_score = (
-    #             structural_score - self.stats[self.class_name]["structural_scores"]["mean"]
-    #         ) / self.stats[self.class_name]["structural_scores"]["unbiased_std"]
-    #         standard_instance_hungarian_match_score = (
-    #             instance_hungarian_match_score - self.stats[self.class_name]["instance_hungarian_match_scores"]["mean"]
-    #         ) / self.stats[self.class_name]["instance_hungarian_match_scores"]["unbiased_std"]
-
-    #         pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
-    #         pred_score = sigmoid(pred_score)
-
-    #         if self.anomaly_flag:
-    #             pred_score = 1.0
-    #             self.anomaly_flag = False
-
-    #         pred_scores.append(pred_score)
-
-    #     return ImageBatch(
-    #         image=image,
-    #         pred_score=torch.tensor(pred_scores, device=image.device),
-    #     )
-
-
     def forward(self, image: torch.Tensor) -> ImageBatch:
-        """Forward pass of the model.
+        """
+        Forward pass of the model.
 
         Args:
-            image (torch.Tensor): The input image.
+            image (torch.Tensor): The input image batch of shape [B, 3, H, W].
 
         Returns:
-            ImageBatch: The output image batch.
+            ImageBatch: The output image batch with prediction scores.
         """
-        # TODO: Implement the forward pass of the model.
+        self.anomaly_flag = False
+
         # Ensure 4D input: [B, 3, H, W]
         if image.ndim == 3:  # single image, [3, H, W]
             image = image.unsqueeze(0)
-        batch_size = image.shape[0]
-        if batch_size > 1:
-            raise RuntimeError("out of memory")
 
-        self.anomaly_flag = False
+        batch_size = image.shape[0]
         batch = image.clone().detach().to(self.device)
         batch = self.transform(batch)
-        results = self.forward_one_sample(batch, self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
 
-        hist_score = results['hist_score']
-        structural_score = results['structural_score']
-        instance_hungarian_match_score = results['instance_hungarian_match_score']
-
-        anomaly_map_structural = results['anomaly_map_structural']
-
+        pred_scores = []
         if self.validation:
-            return {"hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score), "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
+            hist_scores = []
+            structural_scores = []
+            instance_scores = []
+            for i in range(batch_size):
+                results = self.forward_one_sample(batch[i].unsqueeze(0), self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
+                hist_scores.append(results['hist_score'])
+                structural_scores.append(results['structural_score'])
+                instance_scores.append(results['instance_hungarian_match_score'])
 
+            return {
+                "hist_score": torch.tensor(hist_scores, device=image.device),
+                "structural_score": torch.tensor(structural_scores, device=image.device),
+                "instance_hungarian_match_score": torch.tensor(instance_scores, device=image.device),
+            }
+
+        # Non-validation: perform scoring and sigmoid
         def sigmoid(z):
-            return 1/(1 + np.exp(-z))
-        
-        # standardization
-        standard_structural_score = (structural_score - self.stats[self.class_name]["structural_scores"]["mean"]) / self.stats[self.class_name]["structural_scores"]["unbiased_std"]
-        standard_instance_hungarian_match_score = (instance_hungarian_match_score - self.stats[self.class_name]["instance_hungarian_match_scores"]["mean"]) / self.stats[self.class_name]["instance_hungarian_match_scores"]["unbiased_std"]
- 
-        pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
-        pred_score = sigmoid(pred_score)
-        
-        if self.anomaly_flag:
-            pred_score = 1.
-            self.anomaly_flag = False
+            return 1 / (1 + np.exp(-z))
 
-        # return {"pred_score": torch.tensor(pred_score), "anomaly_map": torch.tensor(anomaly_map_structural), "hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score), "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
+        for i in range(batch_size):
+            results = self.forward_one_sample(batch[i].unsqueeze(0), self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
+
+            hist_score = results['hist_score']
+            structural_score = results['structural_score']
+            instance_hungarian_match_score = results['instance_hungarian_match_score']
+
+            # standardization
+            standard_structural_score = (
+                structural_score - self.stats[self.class_name]["structural_scores"]["mean"]
+            ) / self.stats[self.class_name]["structural_scores"]["unbiased_std"]
+            standard_instance_hungarian_match_score = (
+                instance_hungarian_match_score - self.stats[self.class_name]["instance_hungarian_match_scores"]["mean"]
+            ) / self.stats[self.class_name]["instance_hungarian_match_scores"]["unbiased_std"]
+
+            pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+            pred_score = sigmoid(pred_score)
+
+            if self.anomaly_flag:
+                pred_score = 1.0
+                self.anomaly_flag = False
+
+            pred_scores.append(pred_score)
 
         return ImageBatch(
             image=image,
-            pred_score=torch.tensor(pred_score).to(image.device),
+            pred_score=torch.tensor(pred_scores, device=image.device),
         )
+
+
+    # def forward(self, image: torch.Tensor) -> ImageBatch:
+    #     """Forward pass of the model.
+
+    #     Args:
+    #         image (torch.Tensor): The input image.
+
+    #     Returns:
+    #         ImageBatch: The output image batch.
+    #     """
+    #     # TODO: Implement the forward pass of the model.
+    #     # Ensure 4D input: [B, 3, H, W]
+    #     if image.ndim == 3:  # single image, [3, H, W]
+    #         image = image.unsqueeze(0)
+    #     batch_size = image.shape[0]
+    #     if batch_size > 1:
+    #         raise RuntimeError("out of memory")
+
+    #     self.anomaly_flag = False
+    #     batch = image.clone().detach().to(self.device)
+    #     batch = self.transform(batch)
+    #     results = self.forward_one_sample(batch, self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset)
+
+    #     hist_score = results['hist_score']
+    #     structural_score = results['structural_score']
+    #     instance_hungarian_match_score = results['instance_hungarian_match_score']
+
+    #     anomaly_map_structural = results['anomaly_map_structural']
+
+    #     if self.validation:
+    #         return {"hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score), "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
+
+    #     def sigmoid(z):
+    #         return 1/(1 + np.exp(-z))
+        
+    #     # standardization
+    #     standard_structural_score = (structural_score - self.stats[self.class_name]["structural_scores"]["mean"]) / self.stats[self.class_name]["structural_scores"]["unbiased_std"]
+    #     standard_instance_hungarian_match_score = (instance_hungarian_match_score - self.stats[self.class_name]["instance_hungarian_match_scores"]["mean"]) / self.stats[self.class_name]["instance_hungarian_match_scores"]["unbiased_std"]
+ 
+    #     pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+    #     pred_score = sigmoid(pred_score)
+        
+    #     if self.anomaly_flag:
+    #         pred_score = 1.
+    #         self.anomaly_flag = False
+
+    #     # return {"pred_score": torch.tensor(pred_score), "anomaly_map": torch.tensor(anomaly_map_structural), "hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score), "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
+
+    #     return ImageBatch(
+    #         image=image,
+    #         pred_score=torch.tensor(pred_score).to(image.device),
+    #     )
     
     def forward_one_sample(self, batch: torch.Tensor, mem_patch_feature_clip_coreset: torch.Tensor, mem_patch_feature_dinov2_coreset: torch.Tensor, path: str = ""):
         batch = F.interpolate(batch, size=(448, 448), mode=self.inter_mode, align_corners=self.align_corners, antialias=self.antialias)
