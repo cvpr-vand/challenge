@@ -34,14 +34,23 @@ class FastSAMSegmenterFormatted:
             print(f"下载或加载 FastSAM 权重失败: {e}")
             self.model_fastsam = None
 
-    def generate_masks_formatted(self, raw_image_np_rgb):
+    def generate_masks_formatted(self, raw_image_np_rgb, class_name):
         if self.model_fastsam is None:
             print("FastSAM model not loaded.")
             return []
 
         height, width = raw_image_np_rgb.shape[:2]
         
-        results = self.model_fastsam(raw_image_np_rgb,
+        if class_name == 'pushpins':
+            results = self.model_fastsam(raw_image_np_rgb,
+                                     device=self.device,
+                                     retina_masks=True,
+                                     imgsz=2048,#height, # 使用原始高度，或自定义
+                                     conf=0.25,
+                                     iou=0.7,
+                                     verbose=False)
+        else:
+            results = self.model_fastsam(raw_image_np_rgb,
                                      device=self.device,
                                      retina_masks=True,
                                      imgsz=height, # 使用原始高度，或自定义
@@ -108,13 +117,13 @@ class Model(nn.Module):
             ],
         )
        
-        # self.model_clip, _, _ = open_clip.create_model_and_transforms(
-        #     model_name="ViT-L-14",
-        #     pretrained="/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
-        # )
-        # self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
-        self.model_clip, _, _ = open_clip.create_model_and_transforms('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
-        self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
+        self.model_clip, _, _ = open_clip.create_model_and_transforms(
+            model_name="ViT-L-14",
+            pretrained="/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
+        )
+        self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
+        # self.model_clip, _, _ = open_clip.create_model_and_transforms('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
+        # self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
 
 
         self.feature_list = [6, 12, 18, 24]
@@ -566,7 +575,7 @@ class Model(nn.Module):
         if self.class_name == 'splicing_connectors':
             masks = self.mask_generator.generate(raw_image)
         else:
-            masks = self.segmenter.generate_masks_formatted(raw_image)
+            masks = self.segmenter.generate_masks_formatted(raw_image, self.class_name)
         # self.predictor.set_image(raw_image)
 
         # # --- 策略1：降低SAM输入分辨率 ---
