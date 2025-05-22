@@ -139,19 +139,19 @@ class Model(nn.Module):
             print(f"下载或加载 SAM ({SAM_MODEL_TYPE}) 权重失败: {e}")
             print("请检查网络连接、URL或本地权重路径是否正确。")
         self.model_sam.to(self.device).eval()
-        self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
+        # self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
         # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
-        # self.mask_generator = SamAutomaticMaskGenerator(
-        #     model=self.model_sam,
-        #     points_per_side=8,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
-        #     # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
-        #     # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
-        #     # box_nms_thresh=0.7, # 默认。
-        #     # min_mask_region_area=100,  # 默认 0。设置一个合理的最小面积（例如根据您的目标对象大小）可以过滤掉很多小噪声掩码。
-        #     # points_per_batch=64, # 默认。如果显存足够，可以尝试增大；如果显存不足，可以减小。对总时间影响可能不大。
-        #     # crop_n_layers=0, # 默认。 设为0表示不使用裁剪预测，可能会更快。
-        #     # crop_n_points_downscale_factor=1 # 默认。
-        # )
+        self.mask_generator = SamAutomaticMaskGenerator(
+            model=self.model_sam,
+            points_per_side=16,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
+            # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
+            # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
+            # box_nms_thresh=0.7, # 默认。
+            # min_mask_region_area=100,  # 默认 0。设置一个合理的最小面积（例如根据您的目标对象大小）可以过滤掉很多小噪声掩码。
+            # points_per_batch=64, # 默认。如果显存足够，可以尝试增大；如果显存不足，可以减小。对总时间影响可能不大。
+            # crop_n_layers=0, # 默认。 设为0表示不使用裁剪预测，可能会更快。
+            # crop_n_points_downscale_factor=1 # 默认。
+        )
 
         # 替换为fastsam
         self.segmenter = FastSAMSegmenterFormatted(device=self.device)
