@@ -281,7 +281,19 @@ def advanced_smooth_masks(mask_list, contour_smoothing=True, remove_small_holes=
     return processed_masks
 
 
+def post_process_masks(refined_masks, class_name):
 
+    if class_name == "breakfast_box":
+        refined_masks = merge_small_regions_to_smallest_neighbor(refined_masks)
+        refined_masks = merge_small_regions_to_smallest_neighbor(refined_masks, min_area_threshold=2000, max_target_area_threshold=None, merge_to_kth_largest=1)
+        refined_masks = smooth_masks(refined_masks)
+    elif class_name == "pushpins":
+        refined_masks = merge_small_regions_to_smallest_neighbor(refined_masks, min_area_threshold=300, max_target_area_threshold=None, merge_to_kth_largest=1)
+        refined_masks = merge_small_regions_to_smallest_neighbor(refined_masks, min_area_threshold=600, max_target_area_threshold=None, merge_to_kth_largest=1)
+        refined_masks = filter_masks_by_area(refined_masks, 500 * 3)
+
+    return refined_masks
+    
 
 
 def split_masks_by_connected_component(masks):
@@ -1593,3 +1605,85 @@ def extract_mask_features(mask_list, original_image=None, class_name=None):
         }
     
     return features
+
+
+import os
+import json
+
+def compute_logical_score(masks, class_name, image_idx):
+
+    logical_features = extract_mask_features(masks, cv2.imread(f"src/eval/submission/test_images/{class_name}/{str(image_idx)}/image_0.jpg"),class_name)
+
+    logical_score = 0
+
+    if class_name == "breakfast_box":
+        if (logical_features[0]['centroid'][1] + logical_features[1]['centroid'][1] + logical_features[2]['centroid'][1]) / 3 > 128:
+            print("123 center")
+            logical_score += 1
+
+        if (logical_features[3]['avg_color'][2]) > 160 or (logical_features[3]['avg_color'][2]) < 90:
+            print("3 color")
+            logical_score += 1
+
+        if logical_features[3]['area'] < 6000 or logical_features[3]['centroid'][0] < 128:
+            print("3 area")
+            logical_score += 1
+
+        if (logical_features[3]['area'] + logical_features[4]['area']) / 2 < 10000 or logical_features[5]['area'] > 29000:
+            print("34 area")
+            logical_score += 1
+        
+        with open(f"src/eval/submission/test_masks/{class_name}/{str(image_idx)}/pred_phrases.json") as f:
+            items = json.load(f)
+            orange_count = 0
+            for item in items:
+                if "orange" in item:
+                    orange_count += 1
+
+            if orange_count != 2:
+                print("orange count")
+                logical_score += 1
+
+    if class_name == "pushpins":
+
+        if logical_features[0]['enclosing_circle_diameter'] < 80 or logical_features[1]['enclosing_circle_diameter'] < 80:
+            print("pin length")
+            logical_score += 1
+
+        for i in range(len(logical_features)):
+            if logical_features[i]['avg_color'][0] < 44 or logical_features[i]['avg_color'][0] > 61 or logical_features[i]['avg_color'][1] < 104 or logical_features[i]['avg_color'][1] > 161 or logical_features[i]['avg_color'][2] < 148 or logical_features[i]['avg_color'][2] > 204:
+                print("pin color")
+                logical_score += 0.2
+
+        image_to_show = cv2.imread(f"src/eval/submission/test_images/{class_name}/{str(image_idx)}/image_0.jpg")
+        lines = find_lines(image_to_show)
+
+
+        horizontal_lines = 0
+        vertical_lines = 0
+
+        for line in lines[0]:
+            line_length = abs(line[0] - line[2])
+            if line_length > 350:
+                horizontal_lines += 1
+        
+        for line in lines[1]:
+            line_length = abs(line[1] - line[3])
+            if line_length > 350:
+                vertical_lines += 1
+
+        if horizontal_lines != 4 or vertical_lines != 6:
+            print("line count")
+            logical_score += 1
+        else:
+            pins_centroids = []
+            for i in range(len(logical_features)):
+                pins_centroids.append(logical_features[i]['centroid'])
+
+            result, grid_counts, _ = check_pin_distribution(pins_centroids, lines[0], lines[1])
+
+            if not result:
+                print("pins distribution")
+                logical_score += 1
+
+    return logical_score

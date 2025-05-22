@@ -23,11 +23,11 @@ from eval.submission.model import Model
 from eval.utils import auto_batch_size
 
 CATEGORIES = [
-    "breakfast_box",
-    "juice_bottle",
+    # "breakfast_box",
+    # "juice_bottle",
     "pushpins",
-    "screw_bag",
-    "splicing_connectors",
+    # "screw_bag",
+    # "splicing_connectors",
 ]
 
 
