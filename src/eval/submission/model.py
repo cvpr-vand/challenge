@@ -20,6 +20,62 @@ from matplotlib import pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
 import pickle
+from ultralytics import FastSAM
+
+class FastSAMSegmenterFormatted:
+    def __init__(self, device='cuda'):
+        self.device = device
+        try:
+            self.model_fastsam = FastSAM('FastSAM-x.pt') # 或 'fastsam-s.pt'
+            # model_fastsam 本身会自动移到可用设备，但可以明确指定
+            # self.model_fastsam.to(self.device) # ultralytics 模型通常在推理时处理设备
+            # print("Successfully loaded FastSAM model.")
+        except Exception as e:
+            print(f"下载或加载 FastSAM 权重失败: {e}")
+            self.model_fastsam = None
+
+    def generate_masks_formatted(self, raw_image_np_rgb):
+        if self.model_fastsam is None:
+            print("FastSAM model not loaded.")
+            return []
+
+        height, width = raw_image_np_rgb.shape[:2]
+        
+        results = self.model_fastsam(raw_image_np_rgb,
+                                     device=self.device,
+                                     retina_masks=True,
+                                     imgsz=height, # 使用原始高度，或自定义
+                                     conf=0.25,
+                                     iou=0.7,
+                                     verbose=False)
+        
+        formatted_masks = []
+        if results and results[0].masks is not None:
+            masks_tensor = results[0].masks.data.cpu().numpy() # (N, H, W)
+            # xyxyn 是归一化的 [x1, y1, x2, y2]
+            # xywhn 是归一化的 [x_center, y_center, width, height]
+            # xyxy 是绝对像素的 [x1, y1, x2, y2]
+            # xywh 是绝对像素的 [x_center, y_center, width, height]
+            boxes_xyxy = results[0].boxes.xyxy.cpu().numpy() # (N, 4)
+            confs = results[0].boxes.conf.cpu().numpy()    # (N,)
+
+            for i in range(masks_tensor.shape[0]):
+                mask_np = masks_tensor[i].astype(bool)
+                area = int(mask_np.sum())
+                
+                x1, y1, x2, y2 = boxes_xyxy[i]
+                bbox = [int(x1), int(y1), int(x2 - x1), int(y2 - y1)] # x, y, w, h
+
+                formatted_masks.append({
+                    'segmentation': mask_np,
+                    'area': area,
+                    'bbox': bbox,
+                    'predicted_iou': float(confs[i]), # 使用置信度作为 predicted_iou
+                    'point_coords': [[(bbox[0] + bbox[2] // 2), (bbox[1] + bbox[3] // 2)]], # 使用 bbox 中心作为示例点
+                    'stability_score': float(confs[i]), # 使用置信度作为 stability_score 的近似值
+                    'crop_box': [0, 0, width, height] # FastSAM (ultralytics) 通常在全图操作
+                })
+        return formatted_masks
 
 def to_np_img(m):
     m = m.permute(1, 2, 0).cpu().numpy()
@@ -83,19 +139,22 @@ class Model(nn.Module):
             print(f"下载或加载 SAM ({SAM_MODEL_TYPE}) 权重失败: {e}")
             print("请检查网络连接、URL或本地权重路径是否正确。")
         self.model_sam.to(self.device).eval()
-        # self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
+        self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
         # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
-        self.mask_generator = SamAutomaticMaskGenerator(
-            model=self.model_sam,
-            points_per_side=8,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
-            # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
-            # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
-            # box_nms_thresh=0.7, # 默认。
-            # min_mask_region_area=100,  # 默认 0。设置一个合理的最小面积（例如根据您的目标对象大小）可以过滤掉很多小噪声掩码。
-            # points_per_batch=64, # 默认。如果显存足够，可以尝试增大；如果显存不足，可以减小。对总时间影响可能不大。
-            # crop_n_layers=0, # 默认。 设为0表示不使用裁剪预测，可能会更快。
-            # crop_n_points_downscale_factor=1 # 默认。
-        )
+        # self.mask_generator = SamAutomaticMaskGenerator(
+        #     model=self.model_sam,
+        #     points_per_side=8,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
+        #     # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
+        #     # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
+        #     # box_nms_thresh=0.7, # 默认。
+        #     # min_mask_region_area=100,  # 默认 0。设置一个合理的最小面积（例如根据您的目标对象大小）可以过滤掉很多小噪声掩码。
+        #     # points_per_batch=64, # 默认。如果显存足够，可以尝试增大；如果显存不足，可以减小。对总时间影响可能不大。
+        #     # crop_n_layers=0, # 默认。 设为0表示不使用裁剪预测，可能会更快。
+        #     # crop_n_points_downscale_factor=1 # 默认。
+        # )
+
+        # 替换为fastsam
+        self.segmenter = FastSAMSegmenterFormatted(device=self.device)
 
         self.memory_size = 2048
         self.n_neighbors = 2
@@ -504,7 +563,10 @@ class Model(nn.Module):
 
         raw_image = to_np_img(image[0])
         height, width = raw_image.shape[:2]
-        masks = self.mask_generator.generate(raw_image)
+        if self.class_name == 'splicing_connectors':
+            masks = self.mask_generator.generate(raw_image)
+        else:
+            masks = self.segmenter.generate_masks_formatted(raw_image)
         # self.predictor.set_image(raw_image)
 
         # # --- 策略1：降低SAM输入分辨率 ---

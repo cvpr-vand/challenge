@@ -9,6 +9,7 @@ dependencies = [
     "scikit-learn",
     # TODO: Add your additional dependencies here
     "kmeans-pytorch==0.3",
+    "ultralytics==8.3.141",
 ]
 
 [tool.uv.sources]
