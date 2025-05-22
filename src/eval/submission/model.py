@@ -181,7 +181,7 @@ class Model(nn.Module):
                 )
 
         clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
-        self.image_size = 224
+        self.image_size = 448
         device = torch.device("cuda")
         self.out_layers = [6, 12, 18, 24]
 
@@ -259,6 +259,7 @@ class Model(nn.Module):
         #     boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
         #     boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
         #     boxes_filt[i][2:] += boxes_filt[i][:2]
+
         boxes_filt = boxes_filt.cpu()
 
         if boxes_filt.size(0) == 0:
@@ -559,10 +560,181 @@ class Model(nn.Module):
 
                 continue
 
+            logical_features = extract_mask_features(masks, cv2.imread(f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}/image_0.jpg"),self.class_name)
+
+            if self.class_name == "breakfast_box":
+                if (logical_features[0]['centroid'][1] + logical_features[1]['centroid'][1] + logical_features[2]['centroid'][1]) / 3 > 128:
+                    print("123 center")
+                    logical_score += 1
+
+                if (logical_features[3]['avg_color'][2]) > 160 or (logical_features[3]['avg_color'][2]) < 90:
+                    print("3 color")
+                    logical_score += 1
+
+                if logical_features[3]['area'] < 6000 or logical_features[3]['centroid'][0] < 128:
+                    print("3 area")
+                    logical_score += 1
+
+                if (logical_features[3]['area'] + logical_features[4]['area']) / 2 < 10000 or logical_features[5]['area'] > 29000:
+                    print("34 area")
+                    logical_score += 1
+                
+                with open(f"src/eval/submission/test_masks/{self.class_name}/{str(self.image_idx)}/pred_phrases.json") as f:
+                    items = json.load(f)
+                    orange_count = 0
+                    for item in items:
+                        if "orange" in item:
+                            orange_count += 1
+
+                    if orange_count != 2:
+                        print("orange count")
+                        logical_score += 1
+
+            if self.class_name == "juice_bottle":
+
+                with open(f"src/eval/submission/test_masks/{self.class_name}/{str(self.image_idx)}/pred_phrases.json") as f:
+                    items = json.load(f)
+                    fruit = find_highest_fruit(items)
+
+                    if fruit == "no fruit":
+                        print("no fruit")
+                        logical_score += 1
+                    elif fruit == "banana":
+                        if logical_features[2]['avg_color'][0] < 90 or logical_features[2]['avg_color'][0] > 104 or logical_features[2]['avg_color'][1] < 97 or logical_features[2]['avg_color'][1] > 121 or logical_features[2]['avg_color'][2] < 99 or logical_features[2]['avg_color'][2] > 128:
+                            print("banana color")
+                            logical_score += 1
+                    elif fruit == "orange":
+                        if logical_features[2]['avg_color'][0] < 53 or logical_features[2]['avg_color'][0] > 60 or logical_features[2]['avg_color'][1] < 97 or logical_features[2]['avg_color'][1] > 110 or logical_features[2]['avg_color'][2] < 108 or logical_features[2]['avg_color'][2] > 125:
+                            print("orange color")
+                            logical_score += 1
+                    elif fruit == "cherry":
+                        if logical_features[2]['avg_color'][0] < 32 or logical_features[2]['avg_color'][0] > 37 or logical_features[2]['avg_color'][1] < 35 or logical_features[2]['avg_color'][1] > 40 or logical_features[2]['avg_color'][2] < 61 or logical_features[2]['avg_color'][2] > 67:
+                            print("cherry color")
+                            logical_score += 1
+
+                if logical_features[0]['area'] > 2500:
+                    print("label area")
+                    logical_score += 1
+
+                if logical_features[0]['centroid'][0] > 220 or logical_features[0]['centroid'][0] < 200:
+                    print("label position")
+                    logical_score += 1
+
+            if self.class_name == "pushpins":
+
+                if logical_features[0]['enclosing_circle_diameter'] < 80 or logical_features[1]['enclosing_circle_diameter'] < 80:
+                    print("pin length")
+                    logical_score += 1
+
+                for i in range(len(logical_features)):
+                    if logical_features[i]['avg_color'][0] < 44 or logical_features[i]['avg_color'][0] > 61 or logical_features[i]['avg_color'][1] < 104 or logical_features[i]['avg_color'][1] > 161 or logical_features[i]['avg_color'][2] < 148 or logical_features[i]['avg_color'][2] > 204:
+                        print("pin color")
+                        logical_score += 0.2
+
+                image_to_show = cv2.imread(f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}/image_0.jpg")
+                lines = find_lines(image_to_show)
+
+
+                horizontal_lines = 0
+                vertical_lines = 0
+
+                for line in lines[0]:
+                    line_length = abs(line[0] - line[2])
+                    if line_length > 350:
+                        horizontal_lines += 1
+                
+                for line in lines[1]:
+                    line_length = abs(line[1] - line[3])
+                    if line_length > 350:
+                        vertical_lines += 1
+
+                if horizontal_lines != 4 or vertical_lines != 6:
+                    print("line count")
+                    logical_score += 1
+                else:
+                    pins_centroids = []
+                    for i in range(len(logical_features)):
+                        pins_centroids.append(logical_features[i]['centroid'])
+
+                    result, grid_counts, _ = check_pin_distribution(pins_centroids, lines[0], lines[1])
+
+                    if not result:
+                        print("pins distribution")
+                        logical_score += 1
+
+            if self.class_name == "splicing_connectors":
+                rel_y_1 = get_relative_connection_y(masks[1], masks[0])
+                rel_y_2 = get_relative_connection_y(masks[2], masks[0])
+
+                area_1 = logical_features[1]['area']
+                area_2 = logical_features[2]['area']
+
+
+                if area_1 >= 5000 and area_2 >= 5000 or (area_1 >= 3000 and area_1 < 5000 and area_2 >= 3000 and area_2 < 5000) or (area_1 < 3000 and area_2 < 3000):
+                    pass
+                else:
+                    print("area not same")
+                    logical_score += 1
+
+                if logical_features[0]['area'] < 700:
+                    print("wire area")
+                    logical_score += 1
+
+
+                if rel_y_1 == None or rel_y_2 == None:
+                    print("no connection")
+                    logical_score += 1
+                else:
+                    labels = []
+                    if area_1 >= 2000 and area_1 < 3000:
+                        if logical_features[0]['avg_color'][0] < 68 or logical_features[0]['avg_color'][0] > 78 or logical_features[0]['avg_color'][1] < 166 or logical_features[0]['avg_color'][1] > 188 or logical_features[0]['avg_color'][2] < 203 or logical_features[0]['avg_color'][2] > 226:
+                            print("color")
+                            logical_score += 1
+                        for rel_y in [rel_y_1, rel_y_2]:
+                            if rel_y >= 0.5:
+                                labels.append(1)
+                            else:
+                                labels.append(0)
+                    elif area_1 >= 3000 and area_1 < 5000:
+                        if logical_features[0]['avg_color'][0] < 148 or logical_features[0]['avg_color'][0] > 164 or logical_features[0]['avg_color'][1] < 95 or logical_features[0]['avg_color'][1] > 106 or logical_features[0]['avg_color'][2] < 84 or logical_features[0]['avg_color'][2] > 94:
+                            print("color")
+                            logical_score += 1
+                        for rel_y in [rel_y_1, rel_y_2]:
+                            if rel_y <= 1 / 3:
+                                labels.append(0)
+                            elif rel_y <= 2 / 3:
+                                labels.append(1)
+                            else:
+                                labels.append(2)
+                    else:
+                        if logical_features[0]['avg_color'][0] < 36 or logical_features[0]['avg_color'][0] > 41 or logical_features[0]['avg_color'][1] < 59 or logical_features[0]['avg_color'][1] > 65 or logical_features[0]['avg_color'][2] < 175 or logical_features[0]['avg_color'][2] > 194:
+                            print("color")
+                            logical_score += 1
+                        for rel_y in [rel_y_1, rel_y_2]:
+                            if rel_y <= 1 / 5:
+                                labels.append(0)
+                            elif rel_y <= 2 / 5:
+                                labels.append(1)
+                            elif rel_y <= 3 / 5:
+                                labels.append(2)
+                            elif rel_y <= 4 / 5:
+                                labels.append(3)
+                            else:
+                                labels.append(4)
+                    if labels[0] != labels[1]:
+                        print("wrong connection")
+                        logical_score += 1
+
+            if self.class_name == "screw_bag":
+                if logical_features[4]["enclosing_circle_diameter"] > 95 and logical_features[5]["enclosing_circle_diameter"] > 95:
+                    logical_score += 1
+                if logical_features[4]["enclosing_circle_diameter"] < 75 and logical_features[5]["enclosing_circle_diameter"] < 75:
+                    logical_score += 1
+                if max(logical_features[4]["enclosing_circle_diameter"], logical_features[5]["enclosing_circle_diameter"]) < 95 or min(logical_features[4]["enclosing_circle_diameter"], logical_features[5]["enclosing_circle_diameter"]) < 55:
+                    logical_score += 1
 
             final_score = 1 * logical_score + 1 * structure_score
-            batch_pred_scores.append(final_score)    
-
+            batch_pred_scores.append(final_score)
             
         pred_scores = torch.tensor(batch_pred_scores, device=image.device)       
 
