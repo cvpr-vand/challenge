@@ -500,7 +500,6 @@ class Model(nn.Module):
                 )
 
 
-            
             logical_score = 0
             masks, _ = split_masks_from_one_mask_sort(cv2.imread(f"src/eval/submission/test_masks/{self.class_name}/{str(self.image_idx)}/refined_masks.png", cv2.IMREAD_GRAYSCALE))
 
@@ -509,17 +508,11 @@ class Model(nn.Module):
             if len(masks) != self.part_num[self.class_name]:
                 logical_score += 1
 
-                final_score = 1 * logical_score + 1 * structure_score
-                batch_pred_scores.append(final_score)
-
-                continue
-
             else:
                 logical_score += compute_logical_score(masks, self.class_name, self.image_idx)
             
-
-
-            
+            final_score = 1 * logical_score + 1 * structure_score
+            batch_pred_scores.append(final_score)
             
         pred_scores = torch.tensor(batch_pred_scores, device=image.device)       
 
