@@ -578,31 +578,61 @@ class Model(nn.Module):
             masks = self.segmenter.generate_masks_formatted(raw_image, self.class_name)
         # self.predictor.set_image(raw_image)
 
-        # # --- 策略1：降低SAM输入分辨率 ---
-        # original_height, original_width = raw_image.shape[:2]
-        # # 设定一个较低的目标尺寸给SAM，例如原始尺寸的一半或固定值
-        # SAM_TARGET_SIZE_H = original_height // 2
-        # SAM_TARGET_SIZE_W = original_width // 2
+        no_pushpins_detected = False
+        if self.class_name == 'pushpins':
+            # 默认假设检测到了图钉
+            filtered_masks = []
+            # 保留面积最大的第一个掩码（作为背景）
+            # background_mask_info = sorted_masks[0]
+            # filtered_masks.append(background_mask_info)
+            # 遍历其余的掩码（从第二个元素开始）
+            # --- 定义禁区 ---
+            # 1. 顶部中间区域
+            top_forbidden_zone = {
+                "x_min": width * 0.4,
+                "x_max": width * 0.6,
+                "y_min": 0,
+                "y_max": height * 0.1 
+            }
+            # 2. 左侧中间区域
+            left_forbidden_zone = {
+                "x_min": 0,
+                "x_max": width * 0.05,
+                "y_min": height * 0.48,
+                "y_max": height * 0.56
+            }
+            forbidden_zones = [top_forbidden_zone, left_forbidden_zone]
+            for mask_info in masks[0:]:
+                # 只保留面积小于或等于 1000 的掩码
+                if mask_info['area'] > 1000 or mask_info['area'] < 32:
+                    continue 
+                # --- 条件2: 宽高比筛选 ---
+                bbox = mask_info['bbox']
+                x, y, w, h = bbox
+                # 计算长边与短边的比例
+                aspect_ratio = max(w / h, h / w)
+                # 如果宽高比过于极端，则跳过
+                if aspect_ratio > 8.0:
+                    continue # 跳过这个掩码
+                # --- 位置筛选逻辑 ---
+                is_in_forbidden_zone = False
+                # 计算 bbox 的中心点
+                center_x = x + w / 2
+                center_y = y + h / 2
+                for zone in forbidden_zones:
+                    if (zone["x_min"] < center_x < zone["x_max"] and
+                        zone["y_min"] < center_y < zone["y_max"]):
+                        is_in_forbidden_zone = True
+                        # print(f"剔除位于禁区的掩码: bbox={bbox}")
+                        break # 一旦落入一个禁区，就无需再检查其他禁区
+                if is_in_forbidden_zone:
+                    continue # 跳过这个掩码
+                # --- 如果所有条件都通过，则保留该掩码 ---
+                filtered_masks.append(mask_info)
 
-        # # 使用 cv2.resize 调整图像大小，INTER_AREA 通常用于缩小图像
-        # raw_image_for_sam = cv2.resize(raw_image, (SAM_TARGET_SIZE_W, SAM_TARGET_SIZE_H), interpolation=cv2.INTER_AREA)
-
-        # # 使用缩小后的图像生成掩码
-        # # 确保 self.mask_generator 已经初始化
-        # masks_low_res = self.mask_generator.generate(raw_image_for_sam)
-
-        # # 对 SAM 生成的掩码进行处理 plot_results_only 返回一个在低分辨率下的实例分割图 (例如，每个对象一个唯一ID)
-        # if masks_low_res:
-        #     sorted_masks_low_res = sorted(masks_low_res, key=(lambda x: x['area']), reverse=True)
-        #     # 在低分辨率下创建实例图
-        #     sam_instance_map_low_res = plot_results_only(sorted_masks_low_res) # 假设 plot_results_only 返回的是 H_low x W_low 的图
-        #     # 将低分辨率的实例分割图上采样回原始图像尺寸
-        #     # 使用 INTER_NEAREST 来保持掩码的离散标签性质，避免模糊
-        #     sam_mask = cv2.resize(sam_instance_map_low_res.astype(np.uint8), # astype很重要，resize需要数值类型
-        #                         (original_width, original_height), 
-        #                         interpolation=cv2.INTER_NEAREST).astype(int)
-        # else:
-        #     sam_mask = np.zeros((original_height, original_width), dtype=int)
+            if len(filtered_masks) == 0:
+                no_pushpins_detected = True
+            masks = filtered_masks
         
         kmeans_label = pseudo_labels.view(self.feat_size, self.feat_size).cpu().numpy()
         kmeans_mask = kmeans_mask.view(self.feat_size, self.feat_size).cpu().numpy()
@@ -612,7 +642,11 @@ class Model(nn.Module):
         patch_mask = patch_mask.view(self.feat_size, self.feat_size).cpu().numpy()
 
         sorted_masks = sorted(masks, key=(lambda x: x['area']), reverse=True)
-        sam_mask = plot_results_only(sorted_masks).astype(int)
+        # sam_mask = plot_results_only(sorted_masks).astype(int)
+        if no_pushpins_detected:
+            sam_mask = np.zeros((height, width), dtype=np.int32)
+        else:
+            sam_mask = plot_results_only(sorted_masks).astype(np.int)
         
         resized_mask = cv2.resize(kmeans_mask, (width, height), interpolation = cv2.INTER_NEAREST)
         merge_sam = merge_segmentations(sam_mask, resized_mask, background_class=self.classes-1)
@@ -646,6 +680,8 @@ class Model(nn.Module):
             dilate_binary = cv2.dilate(binary, kernel)
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilate_binary, connectivity=8)
             pushpins_count = num_labels - 1 # number of pushpins
+            if no_pushpins_detected:
+                pushpins_count = 0
 
             for i in range(1, num_labels):
                 instance_mask = (labels == i).astype(np.uint8)
