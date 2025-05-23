@@ -646,7 +646,7 @@ class Model(nn.Module):
         if no_pushpins_detected:
             sam_mask = np.zeros((height, width), dtype=np.int32)
         else:
-            sam_mask = plot_results_only(sorted_masks).astype(np.int)
+            sam_mask = plot_results_only(sorted_masks).astype(int)
         
         resized_mask = cv2.resize(kmeans_mask, (width, height), interpolation = cv2.INTER_NEAREST)
         merge_sam = merge_segmentations(sam_mask, resized_mask, background_class=self.classes-1)
