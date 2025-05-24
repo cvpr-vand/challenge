@@ -2,13 +2,8 @@ import argparse
 
 import torch.optim.lr_scheduler
 
-<<<<<<< HEAD
 # from .datasets import *
 # from .datasets import dataset_classes
-=======
-from .datasets import *
-from .datasets import dataset_classes
->>>>>>> 0811921bad3bac6f725035dc280038a7b7d51a32
 from .utils.csv_utils import *
 from .utils.metrics import *
 from .utils.training_utils import *
@@ -22,12 +17,9 @@ import matplotlib.pyplot as plt
 
 TASK = 'CLS'
 
-<<<<<<< HEAD
 dataset_classes = ['breakfast_box', 'screw_bag', 'pushpins', 
                'splicing_connectors', 'juice_bottle']
 
-=======
->>>>>>> 0811921bad3bac6f725035dc280038a7b7d51a32
 
 def save_check_point(model, path):
     selected_keys = [
