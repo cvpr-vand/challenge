@@ -13,19 +13,42 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Clean up disk space
-        run: |
-          docker system prune -af
-          sudo rm -rf /tmp/*
-          sudo rm -rf /var/lib/apt/lists/*
-      - name: Pre-job Cleanup
-        run: |
-          sudu rm -rf /home/user/actions-runner/_work/*
-          df -h
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Clean up disk space
+        run: |
+          # 清理 Docker 资源
+          docker system prune -af --volumes
+          docker rmi $(docker images -aq) || true
+          
+          # 清理系统缓存
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+          
+          # 清理临时文件
+          sudo rm -rf /tmp/*
+          sudo rm -rf /var/tmp/*
+          
+          # 清理 GitHub Actions 相关目录
+          sudo rm -rf /home/user/actions-runner/_work/_actions/*
+          sudo rm -rf /home/user/actions-runner/_work/_temp/*
+          sudo rm -rf /home/user/actions-runner/_work/.tool/*
+          
+          # 显示清理后空间状态
+          df -h
+          du -sh /home/user/*
+
+      # - name: Clean up disk space
+      #   run: |
+      #     docker system prune -af
+      #     sudo rm -rf /tmp/*
+      #     sudo rm -rf /var/lib/apt/lists/*
+      # - name: Pre-job Cleanup
+      #   run: |
+      #     sudo rm -rf /home/user/actions-runner/_work/*
+      #     df -h
       - name: Run Zizmor security scan
         run: |
           uv tool install zizmor
