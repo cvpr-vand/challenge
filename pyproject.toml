@@ -6,8 +6,10 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "anomalib[full]",
+    "loguru>=0.7.3",
     "scikit-learn",
     # TODO: Add your additional dependencies here
+    "seaborn>=0.13.2",
 ]
 
 [tool.uv.sources]
