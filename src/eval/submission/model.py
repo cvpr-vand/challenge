@@ -29,9 +29,13 @@ import os
 import json
 from typing import List, Dict, Any
 import random
+import sys
+dir_path = os.path.dirname(os.path.abspath(__file__))
+cur_path = os.path.join(dir_path, "sam2")
+sys.path.append(cur_path)
 
-from eval.sam2.build_sam import build_sam2
-from eval.sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+from sam2.build_sam import build_sam2
+from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
 
 def to_np_img(m):
