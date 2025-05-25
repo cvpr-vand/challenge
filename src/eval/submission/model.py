@@ -587,7 +587,7 @@ class Model(nn.Module):
         "n_ctx_ab": 1,                        # 异常检测上下文提示词数量
         "n_pro": 3,                           # 原型数量
         "n_pro_ab": 4,                        # 异常检测原型数量
-        "Epoch": 50,                         # 训练轮数
+        "Epoch": 48,                         # 训练轮数
         "lr": 0.02,                          # 学习率
         "momentum": 0.9,                      # 动量
         "weight_decay": 0.0005,               # 权重衰减
