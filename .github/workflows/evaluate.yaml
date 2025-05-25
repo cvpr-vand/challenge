@@ -13,6 +13,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Clean up disk space
+        run: |
+          docker system prune -af
+          sudo rm -rf /tmp/*
+          sudo rm -rf /var/lib/apt/lists/*
       - name: Pre-job Cleanup
         run: |
           rm -rf /home/user/actions-runner/_work/*
