@@ -15,12 +15,12 @@ import pickle
 from scipy.stats import norm
 
 #import open_clip_local as open_clip
-import submission.open_clip_local as open_clip
+import eval.submission.open_clip_local as open_clip
 import cv2
 import numpy as np
 import torch.nn.functional as F
 from kmeans_pytorch import kmeans, kmeans_predict
-from submission.utils.prompt_ensemble import encode_text_with_prompt_ensemble, encode_normal_text, encode_abnormal_text, encode_general_text, encode_obj_text
+from eval.submission.utils.prompt_ensemble import encode_text_with_prompt_ensemble, encode_normal_text, encode_abnormal_text, encode_general_text, encode_obj_text
 from scipy.optimize import linear_sum_assignment
 import time
 import h5py
