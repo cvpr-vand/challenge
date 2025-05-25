@@ -207,14 +207,14 @@ class Model(nn.Module):
 
         self.few_shot_inited = False
 
-        from submission.dinov2.dinov2.hub.backbones import dinov2_vitl14
+        from eval.submission.dinov2.dinov2.hub.backbones import dinov2_vitl14
         self.model_dinov2 = dinov2_vitl14()
         self.model_dinov2.to(self.device)
         self.model_dinov2.eval()
         self.feature_list_dinov2 = [6, 12, 18, 24]
         self.vision_width_dinov2 = 1024
 
-        self.stats = pickle.load(open("./src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
+        self.stats = pickle.load(open("./eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
         #self.stats = pickle.load(open("/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
 
         self.mem_instance_masks = None
