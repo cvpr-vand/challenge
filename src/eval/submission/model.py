@@ -568,8 +568,8 @@ class Model(nn.Module):
         "dataset": "mvtecloco",                # 数据集名称，可选['mvtec', 'visa', 'mvtecloco']
         "train_data": images,                   # 直接加载训练数据
         "class_name": category,                # 类别名称
-        "img_resize": 336, # 240,                     # 图像缩放尺寸 ViT-B-16-plus-240
-        "img_cropsize": 336, # 240,                   # 图像裁剪尺寸 ViT-B-16-plus-240
+        "img_resize": 240, # 240,                     # 图像缩放尺寸 ViT-B-16-plus-240
+        "img_cropsize": 240, # 240,                   # 图像裁剪尺寸 ViT-B-16-plus-240
         "resolution": 400,                     # 分辨率
         "batch_size": 400,                     # 批量大小
         "vis": True,                           # 是否可视化（布尔值）
@@ -580,8 +580,8 @@ class Model(nn.Module):
         "gpu_id": 1,                           # GPU ID
         "pure_test": False,                    # 是否仅测试模式（布尔值）
         "k_shot": k_shot,                      # Few-Shot 的样本数量
-        "backbone": "ViT-L-14-336", # "ViT-B-16-plus-240",       # 骨干网络，可选['ViT-B-16-plus-240', 'ViT-B-16', ...]
-        "pretrained_dataset": "openai", # "laion400m_e32", # 预训练数据集名称
+        "backbone": "ViT-B-16-plus-240", # "ViT-L-14-336", #       # 骨干网络，可选['ViT-B-16-plus-240', 'ViT-B-16', ...]
+        "pretrained_dataset": "laion400m_e32", # "openai", # # 预训练数据集名称
         "use_cpu": 0,                         # 是否使用 CPU（0=否）
         "n_ctx": 4,                           # 上下文提示词数量
         "n_ctx_ab": 1,                        # 异常检测上下文提示词数量
@@ -826,8 +826,8 @@ class Model(nn.Module):
         "dataset": "mvtecloco",                # 数据集名称，可选['mvtec', 'visa', 'mvtecloco']
         "train_data": image,                   # 直接加载训练数据
         "class_name": self.class_name,                # 类别名称
-        "img_resize": 336, # 240,                     # 图像缩放尺寸 ViT-B-16-plus-240
-        "img_cropsize": 336, # 240,                   # 图像裁剪尺寸 ViT-B-16-plus-240
+        "img_resize": 240, # 240,                     # 图像缩放尺寸 ViT-B-16-plus-240
+        "img_cropsize": 240, # 240,                   # 图像裁剪尺寸 ViT-B-16-plus-240
         "resolution": 400,                     # 分辨率
         "batch_size": 400,                     # 批量大小
         "vis": True,                           # 是否可视化（布尔值）
@@ -838,8 +838,8 @@ class Model(nn.Module):
         "gpu_id": 3,                           # GPU ID
         "pure_test": False,                    # 是否仅测试模式（布尔值）
         "k_shot": self.k_shot,                      # Few-Shot 的样本数量
-        "backbone": "ViT-L-14-336", # "ViT-B-16-plus-240",       # 骨干网络，可选['ViT-B-16-plus-240', 'ViT-B-16', ...]
-        "pretrained_dataset": "openai", # "laion400m_e32", # 预训练数据集名称
+        "backbone":"ViT-B-16-plus-240",  #  "ViT-L-14-336", #      # 骨干网络，可选['ViT-B-16-plus-240', 'ViT-B-16', ...]
+        "pretrained_dataset": "laion400m_e32", # 预训练数据集名称
         "use_cpu": 0,                         # 是否使用 CPU（0=否）
         "n_ctx": 4,                           # 上下文提示词数量
         "n_ctx_ab": 1,                        # 异常检测上下文提示词数量
