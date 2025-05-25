@@ -14,7 +14,7 @@ from omegaconf import OmegaConf
 # import sys
 # dirpath = os.path.dirname(os.path.abspath(__file__))
 # sys.path.append(dirpath)
-import eval.sam2
+from eval import sam2
 
 # Check if the user is running Python from the parent directory of the sam2 repo
 # (i.e. the directory where this repo is cloned into) -- this is not supported since
