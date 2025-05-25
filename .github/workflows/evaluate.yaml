@@ -20,7 +20,7 @@ jobs:
           sudo rm -rf /var/lib/apt/lists/*
       - name: Pre-job Cleanup
         run: |
-          rm -rf /home/user/actions-runner/_work/*
+          sudu rm -rf /home/user/actions-runner/_work/*
           df -h
       - name: Checkout code
         uses: actions/checkout@v4
