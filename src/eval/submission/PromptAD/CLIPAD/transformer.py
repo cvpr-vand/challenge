@@ -620,11 +620,11 @@ class V2VTransformer(nn.Module):
         # self.transformer.resblocks[5].register_forward_hook(hook_t1)
         # self.transformer.resblocks[18].register_forward_hook(hook_t2)
         # ViT-L-14-336
-        # self.transformer.resblocks[4].register_forward_hook(hook_t1)
-        # self.transformer.resblocks[14].register_forward_hook(hook_t2)
+        self.transformer.resblocks[4].register_forward_hook(hook_t1)
+        self.transformer.resblocks[14].register_forward_hook(hook_t2)
         # ViT-B-16-plus-240 / ViT-B-32-plus-256
-        self.transformer.resblocks[2].register_forward_hook(hook_t1)
-        self.transformer.resblocks[7].register_forward_hook(hook_t2)
+        # self.transformer.resblocks[2].register_forward_hook(hook_t1)
+        # self.transformer.resblocks[7].register_forward_hook(hook_t2)
         # 不知道是什么的
         # self.transformer.resblocks[6].register_forward_hook(hook_t2) # 更之前的
 
@@ -699,9 +699,9 @@ class V2VTransformer(nn.Module):
 
             # apply architecture surgery on the last 6 blocks
             # ViT-B-16-plus-240
-            for i in range(1, 13):  # surgery 7, maskclip 2
+            # for i in range(1, 13):  # surgery 7, maskclip 2
             # ViT-L-14-334
-            # for i in range(1, 25):
+            for i in range(1, 25):
                 self.attn = Attention(self.embed_dim, self.embed_dim, self.num_heads, True)
                 self.attn.qkv.weight.data = self.transformer.resblocks[-i].attn.in_proj_weight.clone()
                 self.attn.qkv.bias.data = self.transformer.resblocks[-i].attn.in_proj_bias.clone()
