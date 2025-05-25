@@ -30,8 +30,8 @@ import json
 from typing import List, Dict, Any
 import random
 
-from sam2.build_sam import build_sam2
-from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+from eval.sam2.build_sam import build_sam2
+from eval.sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
 
 def to_np_img(m):
