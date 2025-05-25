@@ -489,7 +489,11 @@ class Model(nn.Module):
                 patch_feature = F.normalize(patch_feature, dim=-1)
                 mem_patch_feature = F.normalize(mem_patch_feature, dim=-1)
                 normal_map_patchcore = (patch_feature @ mem_patch_feature.T)
-                topk_vals, _ = normal_map_patchcore.topk(k=3, dim=1)
+                if self.class_name == 'pushpins':
+                    k_topk = 6
+                else:
+                    k_topk = 3
+                topk_vals, _ = normal_map_patchcore.topk(k=k_topk, dim=1)
                 normal_map_patchcore = topk_vals.mean(1).cpu().numpy()
                 # normal_map_patchcore = (normal_map_patchcore.max(1)[0]).cpu().numpy() # 1: normal 0: abnormal 
                 anomaly_map_patchcore = 1 - normal_map_patchcore 
