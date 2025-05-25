@@ -206,7 +206,7 @@ class PromptAD(torch.nn.Module):
         tokenizer = CLIPAD.get_tokenizer(backbone)
         model.eval()
 
-        self.prompt_learner = PromptLearner(n_ctx, n_pro, n_ctx_ab, n_pro_ab, class_name, model, self.precision)
+        self.prompt_learner = PromptLearner(n_ctx=4, n_pro=3, n_ctx_ab=1, n_pro_ab=4, classname=class_name, clip_model=model, pre='fp16') #self.precision)
         self.model = model.to(self.device)
 
         self.tokenizer = tokenizer

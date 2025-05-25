@@ -32,6 +32,73 @@ def save_check_point(model, path):
 
     torch.save(selected_state_dict, path)
 
+# def mmd_loss(f1, f2, kernel_mul=2.0, kernel_num=5):
+#         batch_size = min(f1.size(0), f2.size(0))
+#         kernels = []
+#         for i in range(kernel_num):
+#             bandwidth = kernel_mul ** i
+#             kernels.append(GaussianKernel(bandwidth))
+#         loss = 0
+#         for kernel in kernels:
+#             k1 = kernel(f1[:batch_size], f1[:batch_size])
+#             k2 = kernel(f2[:batch_size], f2[:batch_size])
+#             k12 = kernel(f1[:batch_size], f2[:batch_size])
+#             loss += (k1.mean() + k2.mean() - 2*k12.mean())
+#         return loss / kernel_num
+
+def validate_gradient_flow(model, device="cuda"):
+    # 准备模型
+    model = model.to(device)
+    model.train()  # 确保训练模式
+    
+    # 打印可训练参数
+    print("="*50 + "\n可训练参数清单:")
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(f"{name} | 形状: {param.shape}")
+    
+    # 生成测试数据
+    inputs = torch.randn(2, 3, 240, 240).to(device)
+    targets = torch.randn(2, 240, 240).to(device)
+    
+    # 前向传播
+    outputs, _ = model(inputs,'cls')
+    # outputs = torch.tensor(outputs, device=device)
+    
+    loss = 0 
+    loss = [(loss + f * 0.9) for f in outputs]
+    loss = torch.stack(loss, dim=0).to(device)
+    
+    # 反向传播前梯度状态
+    print("\n" + "="*50 + "\n反向传播前梯度:")
+    for name, param in model.named_parameters():
+        print(f"{name} - 梯度存在: {param.grad is not None}")
+    
+    # 执行反向传播
+    loss.backward()
+    
+    # 反向传播后梯度状态
+    print("\n" + "="*50 + "\n反向传播后梯度:")
+    grad_status = []
+    for name, param in model.named_parameters():
+        has_grad = param.grad is not None
+        grad_status.append(has_grad)
+        grad_norm = param.grad.norm().item() if has_grad else 0
+        print(f"{name[:30]}... | 梯度存在: {has_grad} | 梯度范数: {grad_norm:.4f}")
+    
+    # 参数更新验证
+    initial_params = {name: p.data.clone() for name, p in model.named_parameters()}
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+    optimizer.step()
+    optimizer.zero_grad()
+    
+    print("\n" + "="*50 + "\n参数更新验证:")
+    for name, param in model.named_parameters():
+        delta = torch.abs(param.data - initial_params[name]).mean()
+        print(f"{name[:30]}... | 参数变化均值: {delta:.6f}")
+    
+    return any(grad_status)  # 返回是否存在有效梯度
+
 def fit(model,
         args,
         # dataloader: DataLoader,
@@ -43,6 +110,11 @@ def fit(model,
 
     # change the model into eval mode
     model.eval_mode()
+
+    # has_grad = validate_gradient_flow(model)
+    # print(f"\n梯度传播验证结果: {'成功' if has_grad else '失败'}")
+
+    # input()
 
     features1 = []
     features2 = []
@@ -99,7 +171,7 @@ def fit(model,
                     (f.cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8))) 
                     for f in data]
         data = torch.stack(data, dim=0).to(device)
-        print("shape of data: ", data.shape)
+        # print("shape of data: ", data.shape)
         # data = data.to(device)
 
         data = data[0:1, :, :, :].to(device)
@@ -147,123 +219,110 @@ def fit(model,
 
         trip_loss = criterion_tip(cls_feature, normal_text_features_ahchor, abnormal_text_features_ahchor)
         loss = loss_v2t + trip_loss + loss_match_abnormal * args['lambda1']
-
+        print("loss: ", loss)
         loss.backward()
+
+        # grad_status = []
+        # for name, param in model.named_parameters():
+        #     has_grad = param.grad is not None
+        #     grad_status.append(has_grad)
+        #     grad_norm = param.grad.norm().item() if has_grad else 0
+        #     print(f"{name[:30]}... | 梯度存在: {has_grad} | 梯度范数: {grad_norm:.4f}")
+
         optimizer.step()
-        ######
 
-        # for (data, mask, label, name, img_type) in train_data:
-        #     data = [model.transform(Image.fromarray(cv2.cvtColor(f.numpy(), cv2.COLOR_BGR2RGB))) for f in data]
-        #     data = torch.stack(data, dim=0).to(device)
-
-        #     # data = data[0:1, :, :, :].to(device)
-        #     data = data.to(device)
-
-        #     normal_text_prompt, abnormal_text_prompt_handle, abnormal_text_prompt_learned = model.prompt_learner()
-
-        #     optimizer.zero_grad()
-
-        #     normal_text_features = model.encode_text_embedding(normal_text_prompt, model.tokenized_normal_prompts)
-
-        #     abnormal_text_features_handle = model.encode_text_embedding(abnormal_text_prompt_handle, model.tokenized_abnormal_prompts_handle)
-        #     abnormal_text_features_learned = model.encode_text_embedding(abnormal_text_prompt_learned, model.tokenized_abnormal_prompts_learned)
-        #     abnormal_text_features = torch.cat([abnormal_text_features_handle, abnormal_text_features_learned], dim=0)
-
-        #     # compute mean
-        #     mean_ad_handle = torch.mean(F.normalize(abnormal_text_features_handle, dim=-1), dim=0)
-        #     mean_ad_learned = torch.mean(F.normalize(abnormal_text_features_learned, dim=-1), dim=0)
-
-        #     loss_match_abnormal = (mean_ad_handle - mean_ad_learned).norm(dim=0) ** 2.0
-
-        #     cls_feature, _, _, _ = model.encode_image(data)
-
-        #     # compute v2t loss and triplet loss
-        #     normal_text_features_ahchor = normal_text_features.mean(dim=0).unsqueeze(0)
-        #     normal_text_features_ahchor = normal_text_features_ahchor / normal_text_features_ahchor.norm(dim=-1, keepdim=True)
-
-        #     abnormal_text_features_ahchor = abnormal_text_features.mean(dim=0).unsqueeze(0)
-        #     abnormal_text_features_ahchor = abnormal_text_features_ahchor / abnormal_text_features_ahchor.norm(dim=-1, keepdim=True)
-        #     abnormal_text_features = abnormal_text_features / abnormal_text_features.norm(dim=-1, keepdim=True)
-
-        #     l_pos = torch.einsum('nc,cm->nm', cls_feature, normal_text_features_ahchor.transpose(0, 1))
-        #     l_neg_v2t = torch.einsum('nc,cm->nm', cls_feature, abnormal_text_features.transpose(0, 1))
-
-        #     if model.precision == 'fp16':
-        #         logit_scale = model.model.logit_scale.half()
-        #     else:
-        #         logit_scale = model.model.logit_scalef
-
-        #     logits_v2t = torch.cat([l_pos, l_neg_v2t], dim=-1) * logit_scale
-
-        #     target_v2t = torch.zeros([logits_v2t.shape[0]], dtype=torch.long).to(device)
-
-        #     loss_v2t = criterion(logits_v2t, target_v2t)
-
-        #     trip_loss = criterion_tip(cls_feature, normal_text_features_ahchor, abnormal_text_features_ahchor)
-        #     loss = loss_v2t + trip_loss + loss_match_abnormal * args.lambda1
-
-        #     loss.backward()
-        #     optimizer.step()
         scheduler.step()
         model.build_text_feature_gallery()
 
-        # scores_img = []
-        # score_maps = []
-        # test_imgs = []
-        # gt_list = []
-        # gt_mask_list = []
-        # names = []
+        _ , _ , check_path= get_dir_from_args('CLS', **args)
 
-        # for (data, mask, label, name, img_type) in dataloader:
-
-        #     data = [model.transform(Image.fromarray(f.numpy())) for f in data]
-        #     data = torch.stack(data, dim=0)
-
-        #     for d, n, l, m in zip(data, name, label, mask):
-        #         test_imgs += [denormalization(d.cpu().numpy())]
-        #         l = l.numpy()
-        #         m = m.numpy()
-        #         m[m > 0] = 1
-
-        #         names += [n]
-        #         gt_list += [l]
-        #         gt_mask_list += [m]
-
-        #     data = data.to(device)
-        #     score_img, score_map = model(data, 'cls')
-        #     score_maps += score_map
-        #     scores_img += score_img
-
-        # test_imgs, score_maps, gt_mask_list = specify_resolution(test_imgs, score_maps, gt_mask_list, resolution=(args['resolution'], args['resolution']))
-        # result_dict = metric_cal_img(np.array(scores_img), gt_list, np.array(score_maps))
-
-        # if best_result_dict is None:
-        #     save_check_point(model, check_path)
-        #     best_result_dict = result_dict
-
-        # elif best_result_dict['i_roc'] < result_dict['i_roc']:
-        #     # check_path_save = f"{check_path}-{epoch}"
-        #     # save_check_point(model, check_path_save)
         save_check_point(model, check_path)
-        # best_result_dict = result_dict
-            
-            # seed = torch.initial_seed()
-            # save_epoch_path = f"{args['root_dir']}/{args['dataset']}/k_{args['k_shot']}/epoch.txt"
-            # dir_path = os.path.dirname(save_epoch_path)
-            # if dir_path and not os.path.exists(dir_path):
-            #     os.makedirs(dir_path, exist_ok=True)
-            # # 自动处理文件打开/创建和写入
-            # with open(save_epoch_path, 'a+', encoding='utf-8') as f:
-            #     # 移动指针到文件末尾（兼容某些系统的'a+'模式特性）
-            #     f.seek(0, 2)
-                
-            #     # 判断是否需要换行
-            #     if f.tell() > 0:  # 文件已有内容
-            #         f.write('\n')  # 先换行再写入新内容
-                
-            #     f.write(f"{args['class_name']}-{seed}-{epoch}")
 
-    return best_result_dict
+
+    # return best_result_dict
+
+    # for epoch in range(args['Epoch']):
+    #     # 数据预处理部分保持不变
+    #     data = train_data
+    #     data = [
+    #         model.transform(
+    #             Image.fromarray(
+    #                 (f.cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8))) 
+    #                 for f in data]
+    #     data = torch.stack(data, dim=0).to(device)
+    #     data = data[0:1, :, :, :].to(device)  # 实际使用时建议移除切片操作
+        
+    #     # 文本提示生成
+    #     normal_text_prompt, abnormal_text_prompt_handle, abnormal_text_prompt_learned = model.prompt_learner()
+        
+    #     # 优化器初始化
+    #     optimizer.zero_grad()
+        
+    #     # 文本特征编码
+    #     normal_text_features = model.encode_text_embedding(normal_text_prompt, model.tokenized_normal_prompts)
+    #     abnormal_text_features_handle = model.encode_text_embedding(abnormal_text_prompt_handle, model.tokenized_abnormal_prompts_handle)
+    #     abnormal_text_features_learned = model.encode_text_embedding(abnormal_text_prompt_learned, model.tokenized_abnormal_prompts_learned)
+    #     abnormal_text_features = torch.cat([abnormal_text_features_handle, abnormal_text_features_learned], dim=0)
+        
+    #     # ========== 修改1：使用MMD替代原对齐损失 ==========
+
+    #     loss_match_abnormal = mmd_loss(
+    #         F.normalize(abnormal_text_features_handle, dim=-1),
+    #         F.normalize(abnormal_text_features_learned, dim=-1)
+    #     )
+        
+    #     # 图像特征编码
+    #     cls_feature, _, _, _ = model.encode_image(data)
+        
+    #     # ========== 修改2：对称对比损失计算 ==========
+    #     # 文本和图像特征归一化
+    #     normal_text_anchor = F.normalize(normal_text_features.mean(dim=0, keepdim=True), dim=-1)
+    #     abnormal_text_anchor = F.normalize(abnormal_text_features.mean(dim=0, keepdim=True), dim=-1)
+    #     abnormal_text_all = F.normalize(abnormal_text_features, dim=-1)
+    #     image_features = F.normalize(cls_feature, dim=-1)
+        
+    #     # 图像到文本对比 (V2T)
+    #     logits_v2t = torch.matmul(image_features, torch.cat([normal_text_anchor, abnormal_text_all], 0).T)
+    #     logits_v2t *= model.model.logit_scale.exp()
+        
+    #     # 文本到图像对比 (T2V)
+    #     logits_t2v = torch.matmul(normal_text_anchor, torch.cat([image_features, image_features], 1).T)
+    #     logits_t2v *= model.model.logit_scale.exp()
+        
+    #     # 对比损失计算
+    #     labels = torch.zeros(logits_v2t.size(0), dtype=torch.long).to(device)
+    #     loss_v2t = F.cross_entropy(logits_v2t, labels)
+    #     loss_t2v = F.cross_entropy(logits_t2v, labels)
+    #     loss_contrastive = (loss_v2t + loss_t2v) * 0.5
+        
+    #     # ========== 修改3：使用Circle Loss替代三元组损失 ==========
+    #     pos_sim = torch.sum(image_features * normal_text_anchor, dim=1)  # [B]
+    #     neg_sim = torch.sum(image_features * abnormal_text_anchor, dim=1)  # [B]
+        
+    #     margin = 0.25
+    #     gamma = 64  # 缩放因子
+    #     loss_circle = torch.log(1 + torch.exp(gamma * (neg_sim - pos_sim + margin)))
+    #     loss_circle = loss_circle.mean()
+        
+    #     # ========== 总损失计算 ==========
+    #     total_loss = (
+    #         loss_contrastive +
+    #         loss_circle  +
+    #         loss_match_abnormal * 0.5
+    #     )
+
+    #     print("total loss: ", total_loss)
+        
+    #     # 反向传播
+    #     total_loss.backward()
+    #     optimizer.step()
+
+    #     scheduler.step()
+    #     model.build_text_feature_gallery()
+
+    #     save_check_point(model, check_path)
+
+    # return best_result_dict
 
 
 def main(args):
@@ -311,6 +370,7 @@ def main(args):
     # metrics = fit(model, args, test_dataloader, device, check_path=check_path, train_data=train_data)
 
     # metrics = fit(model, args, device, check_path=check_path, train_data=train_data)
+    fit(model, args, device, check_path=check_path, train_data=train_data)
 
     # i_roc = round(metrics['i_roc'], 2)
     # object = kwargs['class_name']

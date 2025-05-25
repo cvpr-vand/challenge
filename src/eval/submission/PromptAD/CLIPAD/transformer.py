@@ -603,7 +603,7 @@ class V2VTransformer(nn.Module):
 
         @torch.no_grad()
         def hook_t1(module, input, output):
-            print("output[1].shape: ", output[1].shape)
+            # print("output[1].shape: ", output[1].shape)
             self.mid_feature1 = output[1].permute(1, 0, 2)[:, 1:, :]
 
         @torch.no_grad()
@@ -737,7 +737,7 @@ class V2VTransformer(nn.Module):
         x = self.ln_pre(x)
 
         x = x.permute(1, 0, 2)  # NLD -> LND
-        print("x.shape: ", x.shape)
+        # print("x.shape: ", x.shape)
         x = self.transformer(x)
 
         x, x_ori = x
