@@ -302,7 +302,7 @@ class GSAM2Predictor:
                     remain_cicles.append(idx)
 
             for idx, box, score in zip(bolts, boxes[bolts],confidences[bolts]):
-                if max(abs(box[2]-box[0]), abs(box[3]-box[1])) > 150 or (abs(box[2]-box[0])<50 and  abs(box[3]-box[1])< 50) :
+                if max(abs(box[2]-box[0]), abs(box[3]-box[1])) > 170 or (abs(box[2]-box[0])<50 and  abs(box[3]-box[1])< 50) :
                     delete_idx.append(idx)
                 else:
                     remain_bolts.append(idx)

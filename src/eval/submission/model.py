@@ -13,9 +13,10 @@ from anomalib.data import ImageBatch
 
 dir_path = os.path.dirname(os.path.abspath(__file__))
 cur_path = os.path.join(dir_path, "gdino_sam2")
+#sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2')
 sys.path.append(cur_path)
 
-#from .gdino_sam2 import GSAM2Predictor
+
 from eval.submission.gdino_sam2.interface import GSAM2Predictor
 from timm import create_model
 import csv
@@ -61,13 +62,15 @@ class Model(nn.Module):
             "screw_bag": 3, 
             "splicing_connectors":2
         }
-        #eva02_pretrained_cfg = {"file": "submission/eva02_large_patch14_clip_336.merged2b_s6b_b61k/open_clip_model.safetensors"}
+        #eva02_pretrained_cfg = {"file": "models/eva02_large_patch14_clip_336.merged2b_s6b_b61k/open_clip_model.safetensors"}
+        # eva02_pretrained_cfg = { "file": "submission/eva02_large_patch14_clip_336.merged2b_s6b_b61k/open_clip_model.safetensors"}
+        #self.model_eva02 = create_model('eva02_large_patch14_clip_336', pretrained=True, num_classes=768, img_size=self.image_size).to(self.device)
         self.model_eva02 = create_model('eva02_large_patch14_clip_336', pretrained=True, num_classes=768, img_size=self.image_size).to(self.device)
-        #self.model_eva02 = create_model('eva02_large_patch14_clip_336', pretrained=True, pretrained_cfg=eva02_pretrained_cfg, num_classes=768, img_size=self.image_size).to(self.device)
         self.model_eva02.eval()
-        #dinov2_pretrained_cfg = {"file": "submission/vit_large_patch14_dinov2.lvd142m/model.safetensors"}
+        #dinov2_pretrained_cfg = {"file": "models/vit_large_patch14_dinov2.lvd142m/model.safetensors"}
+        # dinov2_pretrained_cfg = {"file": "submission/vit_large_patch14_dinov2.lvd142m/model.safetensors"}
+        #self.model_dinov2 = create_model('vit_large_patch14_dinov2.lvd142m', pretrained=True, num_classes=0, img_size=self.image_size).to(self.device)
         self.model_dinov2 = create_model('vit_large_patch14_dinov2.lvd142m', pretrained=True, num_classes=0, img_size=self.image_size).to(self.device)
-        #self.model_dinov2 = create_model('vit_large_patch14_dinov2.lvd142m', pretrained=True, pretrained_cfg=dinov2_pretrained_cfg, num_classes=0, img_size=self.image_size).to(self.device)
         self.model_dinov2.eval()
         self.gdino_init = False
         self.vis = False
@@ -134,12 +137,15 @@ class Model(nn.Module):
     ):
         subcategory_mean_dists = []
         subcategory_patch_sims = []
-        
+        start_index = 0
+        if self.class_name == "screw_bag":
+            start_index = 1
+
         for layer in range(num_layers):
             subcategory_mean_dists_layer = []
             subcategory_patch_sims_layer = []
             
-            for cat_id in range(self.foreground_num[self.class_name]):
+            for cat_id in range(start_index, self.foreground_num[self.class_name]):
                 subcategory_test_feat, subcategory_test_patch = self.process_subcategory(
                     cat_id, test_patch_tokens[layer], heatmap_cache
                 )
@@ -157,13 +163,11 @@ class Model(nn.Module):
                 sim_max, _ = torch.max(cosine_similarity_matrix, dim=1)
                 subcategory_patch_sims_layer.append(sim_max)
             
-            # 合并当前层的补丁相似度
             if subcategory_patch_sims_layer:
                 subcategory_patch_sims_layer = torch.cat(subcategory_patch_sims_layer, dim=0)
                 subcategory_patch_sims.append(subcategory_patch_sims_layer)
                 subcategory_mean_dists.append(subcategory_mean_dists_layer)
         
-        # 计算跨层的平均补丁相似度
         if subcategory_patch_sims:
             subcategory_patch_sims = torch.mean(torch.stack(subcategory_patch_sims, dim=0), dim=0)
             anomaly_map_ret_part = 1 - subcategory_patch_sims
@@ -194,6 +198,7 @@ class Model(nn.Module):
         self.pushpins_abnormal_flag = 0
         self.connector_abnormal_flag = 0
         self.bottle_abnormal_flag = 0
+        self.scew_bag_abnormal_flag = 0
         heatmap_cache = dict()
         area_hist = list()
         color_hist = list()
@@ -227,7 +232,66 @@ class Model(nn.Module):
                     if abs(box1_height - box2_height)> 0.06 * pil_img.height:
                         # print(image_path,  "连接器高度不一致")
                         self.connector_abnormal_flag = 1
-                
+
+                if len(clusted_masks) > 0:
+                    # 长度限制
+                    box = boxes[label_ids[0][0]]
+                    connector_width_ratio = (box[2] - box[0]) / pil_img.width
+                    if connector_width_ratio < 0.7:
+                        # print(image_path,  "连接器宽度过窄")
+                        self.connector_abnormal_flag = 1
+
+                    binary = clusted_masks[0]
+                    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary)
+                    if num_labels > 2 and np.sum(labels == 1) > 5000 and np.sum(labels == 2) > 5000: # 直线断开
+                        # print(image_path,  "直线断开")
+                        self.connector_abnormal_flag = 1
+
+                    for i in range(1, num_labels):
+                        temp_mask = labels == i
+                        if np.sum(temp_mask) <= 64: # 448x448 64
+                            binary[temp_mask] = 0 # set to background
+                    
+                    # 分割直线和连接器
+                    kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+                    rect_mask = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
+                    # 使用连通域分析统计矩形个数
+                    num_labels_rects, labels_rects, stats_rects, _ = cv2.connectedComponentsWithStats(rect_mask, connectivity=8)
+                    if num_labels_rects < 3:
+                        # print(f"{image_path} 连接器个数不对")
+                        self.connector_abnormal_flag = 1
+
+                    # 分割得到直线
+                    only_line = cv2.subtract(binary, rect_mask)
+                    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(only_line, connectivity=8)
+                    min_area = 1000  # 面积阈值
+                    final_line = np.zeros_like(only_line)
+                    for i in range(1, num_labels):  # 跳过背景
+                        if stats[i, cv2.CC_STAT_AREA] >= min_area:
+                            final_line[labels == i] = 255
+                    
+                    num_labels_line, labels_line, stats_line, _ = cv2.connectedComponentsWithStats(final_line, connectivity=8)
+                    if num_labels_line != 2:
+                        # print(f"{image_path} 直线个数不对")
+                        self.connector_abnormal_flag = 1
+                    else:
+                        # 4. 找到直线的两个端点（即交点）
+                        nonzero_cols = np.where(np.any(final_line, axis=0))[0]  # 所有包含非零像素的列
+                        if len(nonzero_cols) > 0:
+                            left_x = nonzero_cols[0]            # 最左点 x 坐标
+                            right_x = nonzero_cols[-1]          # 最右点 x 坐标
+                            # 找到对应 y 坐标（取该列中间位置）
+                            left_y = np.mean(np.where(final_line[:, left_x] > 0)[0])
+                            right_y = np.mean(np.where(final_line[:, right_x] > 0)[0])
+                            if not self.connector_abnormal_flag and num_labels_rects == 3:
+                                left_box = stats_rects[1,:-1]
+                                right_box = stats_rects[2,:-1]
+                                if left_box[0] > right_box[0]:
+                                    left_box, right_box = right_box, left_box
+                                dist1 = abs(left_y - (left_box[1] + left_box[3])/3)
+                                dist2 = abs(right_y - (right_box[1] + right_box[3])/3)
+                                if abs(dist1 - dist2) > 25:
+                                    self.connector_abnormal_flag = 1
 
             # 转换为LAB色彩空间
             imglabo = cv2.cvtColor(np.array(pil_img), cv2.COLOR_BGR2LAB)
@@ -295,16 +359,18 @@ class Model(nn.Module):
             )
 
         elif self.class_name == "screw_bag":
-            base_item = (20 * anomaly_map_ret_dinov2.max().item() +
+            return ImageBatch(
+                image=batch,
+                pred_score=torch.tensor(
+                        20 * anomaly_map_ret_dinov2.max().item() +
                         10 * anomaly_map_ret_eva02.max().item()   +
                         20 * dinov2_anomaly_map_ret_part.max().item() +
                         25 * dinov2_subcategory_mean_dists.max().item() +
                         5 * eva02_anomaly_map_ret_part.max().item() +
                         25 * eva02_subcategory_mean_dists.max().item() +
-                        30 * abs(area_hist_avg[1] - 1))
-            return ImageBatch(
-                image=batch,
-                pred_score=torch.tensor(base_item+ 30 * abs(area_hist_avg[2] - 1)).to(self.device)
+                        30 * abs(area_hist_avg[1] - 1) + 
+                        30 * abs(area_hist_avg[2] - 1)
+                    ).to(self.device)
             )
 
         elif self.class_name == "splicing_connectors":
@@ -385,7 +451,13 @@ class Model(nn.Module):
         clusted_masks, label_ids = self.mask_generator.cluster_mask(masks, boxes, obj_names, self.class_name)
         if self.class_name == "screw_bag":
             clusted_masks[-1] = clusted_masks[-1] & (~clusted_masks[-2].astype(bool)).astype(int) * 255
-
+            binary = clusted_masks[-1]
+            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary)
+            for i in range(1, num_labels):
+                temp_mask = labels == i
+                if np.sum(temp_mask) <= 300: # 448x448 300
+                    binary[temp_mask] = 0 # set to background
+            clusted_masks[-1] = binary
         return clusted_masks, boxes, label_ids, pil_img
 
     def setup(self, data: dict) -> None:
