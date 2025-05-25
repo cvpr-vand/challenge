@@ -22,6 +22,7 @@ jobs:
           uv tool install zizmor
           uvx zizmor --config zizmor.yml .github/workflows/evaluate.yaml
 
+
   evaluate:
     needs: security-check
     runs-on: vand2025-runner
@@ -64,6 +65,10 @@ jobs:
             pr_number.txt
             pr_name.txt
           retention-days: 30
+      - name: Cleanup workspace
+        run: |
+          rm -rf /home/user/actions-runner/_work/*
+          df -h
 
   publish:
     needs: evaluate
