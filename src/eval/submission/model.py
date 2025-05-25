@@ -25,6 +25,10 @@ from ultralytics import FastSAM
 from skimage.feature import local_binary_pattern, graycomatrix, graycoprops
 from scipy.spatial.distance import mahalanobis
 
+from .advancedinspector import AdvancedInspector
+
+inspector = AdvancedInspector()
+
 class FastSAMSegmenterFormatted:
     def __init__(self, device='cuda'):
         self.device = device
@@ -120,13 +124,13 @@ class Model(nn.Module):
             ],
         )
        
-        # self.model_clip, _, _ = open_clip.create_model_and_transforms(
-        #     model_name="ViT-L-14",
-        #     pretrained="/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
-        # )
-        # self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
-        self.model_clip, _, _ = open_clip.create_model_and_transforms('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
-        self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
+        self.model_clip, _, _ = open_clip.create_model_and_transforms(
+            model_name="ViT-L-14",
+            pretrained="/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
+        )
+        self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
+        # self.model_clip, _, _ = open_clip.create_model_and_transforms('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
+        # self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
 
 
         self.feature_list = [6, 12, 18, 24]
@@ -261,6 +265,11 @@ class Model(nn.Module):
             raise FileNotFoundError(f"Required model statistics file is missing: {pkl_path_tradional}")
         with open(pkl_path_tradional, "rb") as f:
             self.traditional_stats = pickle.load(f)
+        pkl_path_threshold = os.path.join(current_dir, "memory_bank", "statistic_thresholds.pkl")
+        if not os.path.exists(pkl_path_threshold):
+            raise FileNotFoundError(f"Required model statistics file is missing: {pkl_path_threshold}")
+        with open(pkl_path_threshold, "rb") as f:
+            self.threshold_stats = pickle.load(f)
             
         self.mem_instance_masks = None
 
@@ -355,6 +364,8 @@ class Model(nn.Module):
                     standard_traditional_score = (traditional_anomaly_score - mean_trad) / std_trad
                 else: # 如果标准差为0，只做中心化
                     standard_traditional_score = traditional_anomaly_score - mean_trad
+                
+                list_of_scores = results['list_of_scores']
 
             # standardization
             standard_structural_score = (
@@ -366,12 +377,29 @@ class Model(nn.Module):
 
             if self.class_name == 'pushpins':
                 pred_score = max(standard_instance_hungarian_match_score, standard_structural_score, standard_traditional_score)
+                # 结合阈值进行判断
+                reasons = [] # 用于记录异常原因，便于调试
+                for score_name, score_value in list_of_scores.items():
+                    threshold_info = self.threshold_stats[score_name]
+                    threshold = threshold_info['threshold']
+                    # 对污染使用您在inspector中定义的固定像素阈值
+                    if score_name == 'contamination_score':
+                        if score_value > inspector.CONTAMINATION_PIXEL_THRESHOLD:
+                            self.anomaly_flag = True
+                            reasons.append(f"{score_name} | 计数值:{score_value} > 阈值:{inspector.CONTAMINATION_PIXEL_THRESHOLD}")
+                    # 其他分数都是值越大越异常
+                    elif score_name == 'head_shape_score':
+                        if score_value > threshold:
+                            self.anomaly_flag = True
+                            reasons.append(f"{score_name} | 值:{score_value:.4f} > 阈值:{threshold:.4f}")
             else:
                 pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
             pred_score = sigmoid(pred_score)
 
             if self.anomaly_flag:
                 pred_score = 1.0
+                if reasons:
+                    print(f"检测到异常！原因: {', '.join(reasons)}")
                 self.anomaly_flag = False
 
             pred_scores.append(pred_score)
@@ -513,6 +541,12 @@ class Model(nn.Module):
 
                 anomaly_maps_patchcore.append(anomaly_map_patchcore)
 
+        # --- 新增：计算模板匹配分数 ---
+        if self.class_name == 'pushpins' and 'binary_foreground' in results:
+            np_image = to_np_img(batch[0])
+            foreground_mask = results['binary_foreground']
+            list_of_scores = inspector.predict(np_image, foreground_mask)
+        
         # --- 新增：计算传统特征异常分数 ---
         traditional_anomaly_score = 0.0 # 默认为正常
         if self.class_name == 'pushpins' and 'binary_foreground' in results and self.mem_traditional_features is not None:
@@ -581,7 +615,11 @@ class Model(nn.Module):
             instance_hungarian_match_score = np.mean(anomaly_instances_hungarian)     
 
         if self.class_name == 'pushpins':
-            results = {'hist_score': hist_score, 'structural_score': structural_score, 'traditional_anomaly_score': traditional_anomaly_score, 'instance_hungarian_match_score': instance_hungarian_match_score, "anomaly_map_structural": anomaly_map_structural}
+            results = {'hist_score': hist_score, 'structural_score': structural_score,
+                        'traditional_anomaly_score': traditional_anomaly_score,
+                          'instance_hungarian_match_score': instance_hungarian_match_score,
+                            "anomaly_map_structural": anomaly_map_structural,
+                            "list_of_scores": list_of_scores}
         else:
             results = {'hist_score': hist_score, 'structural_score': structural_score,  'instance_hungarian_match_score': instance_hungarian_match_score, "anomaly_map_structural": anomaly_map_structural}
 
@@ -1159,7 +1197,8 @@ class Model(nn.Module):
         patch_token_hist = []
         mem_instance_masks = []
         mem_traditional_features_list = []
-            
+
+        few_shot_data = [] # 用于fewshot_setup创建模板   
         for image, cluster_feature, proj_patch_token in zip(
             few_shot_samples.chunk(self.k_shot), 
             cluster_features.chunk(self.k_shot), 
@@ -1175,6 +1214,7 @@ class Model(nn.Module):
                 if 'binary_foreground' in results:
                     np_image = to_np_img(image[0])
                     foreground_mask = results['binary_foreground']
+                    few_shot_data.append((np_image, foreground_mask))
                     # 提取传统特征
                     traditional_features = self.extract_traditional_features(np_image, foreground_mask)
                     if traditional_features is not None:
@@ -1205,6 +1245,9 @@ class Model(nn.Module):
                 mem_instance_masks.append(results['instance_masks'])
 
             scores.append(results["score"])
+
+        # 进行fewshot_setup
+        inspector.setup(few_shot_data)
 
         if len(foreground_pixel_hist) != 0:
             self.foreground_pixel_hist = np.mean(foreground_pixel_hist)
