@@ -30,13 +30,12 @@ import json
 from typing import List, Dict, Any
 import random
 
-# Grounding DINO
-from eval.submission.grounded_sam import (
-    load_model,
-    get_grounding_output
-)
-from groundingdino.util import get_tokenlizer
-from groundingdino.models import build_model
+dir_path = os.path.dirname(os.path.abspath(__file__))
+print('dir_path: ', dir_path)
+# cur_path = os.path.join(dir_path, 'sam2')
+
+from sam2.build_sam import build_sam2
+from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
 
 def to_np_img(m):
@@ -53,7 +52,6 @@ class Model(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-        # setup_seed(42) # 提交版本注释
         # NOTE: Create your transformation pipeline (if needed).
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.transform = v2.Compose(
@@ -64,16 +62,22 @@ class Model(nn.Module):
         )
 
         # NOTE: Create your model.
-      
+
         
         self.model_clip, _, _ = open_clip.create_model_and_transforms(
             'hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
         self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
-
+        '''
+        local_model_path = '/workspace/MyDeptEDS/srj/2025_competition/LogSAD-master/laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K/open_clip_pytorch_model.bin'
+        self.model_clip, _, _ = open_clip.create_model_and_transforms('ViT-L-14', pretrained=local_model_path)
+        self.tokenizer = open_clip.get_tokenizer('ViT-L-14')
+        '''
         self.feature_list = [6, 12, 18, 24]
         self.embed_dim = 768
         self.vision_width = 1024
 
+        #self.model_sam = sam_model_registry["vit_h"](checkpoint="./submission/checkpoint/sam_vit_h_4b8939.pth").to(self.device)
+        # self.model_sam = sam_model_registry["vit_b"](checkpoint = "./submission/checkpoint/sam_vit_b_01ec64.pth").to(self.device)
         
         import os
         from urllib.request import urlretrieve
@@ -87,21 +91,26 @@ class Model(nn.Module):
             print("Downloading SAM model...")
             urlretrieve(SAM_MODEL_URL, MODEL_PATH)
             print(f"Model saved to {MODEL_PATH}")
-        self.model_sam = sam_model_registry["vit_h"](checkpoint=MODEL_PATH).to(self.device)
-        self.mask_generator = SamAutomaticMaskGenerator(model=self.model_sam)
+        self.model_sam = sam_model_registry["vit_h"](checkpoint=MODEL_PATH)
         
-        GROUNDING_MODEL_URL = "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth"
-        GROUNDING_MODEL_PATH = os.path.join(CHECKPOINT_DIR, "groundingdino_swint_ogc.pth")
-        if not os.path.exists(GROUNDING_MODEL_PATH):
-            print("Downloading GroundingDino model...")
-            urlretrieve(GROUNDING_MODEL_URL, GROUNDING_MODEL_PATH)
-            print(f"Model saved to {GROUNDING_MODEL_PATH}")
         
-        self.grounding_model = load_model('./src/groundingdino/config/GroundingDINO_SwinT_OGC.py', GROUNDING_MODEL_PATH,"cuda")
-        # import pdb
-        # pdb.set_trace()
-        # self.grounding_model = load_model('./src/eval/groundingdino/config/GroundingDINO_SwinT_OGC.py', './src/eval/submission/checkpoint/groundingdino_swint_ogc.pth',"cuda")
+        # self.model_sam = sam_model_registry["vit_h"](checkpoint="./eval/submission/checkpoint/sam_vit_h_4b8939.pth").to(self.device)
+        self.mask_generator_sam = SamAutomaticMaskGenerator(model=self.model_sam)
+        
+        SAM_MODEL_URL = "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt"
+        CHECKPOINT_DIR = "./checkpoint"
+        os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+        MODEL_PATH = os.path.join(CHECKPOINT_DIR, "sam2.1_hiera_large.pt")
 
+        if not os.path.exists(MODEL_PATH):
+            print("Downloading SAM model...")
+            urlretrieve(SAM_MODEL_URL, MODEL_PATH)
+            print(f"Model saved to {MODEL_PATH}")
+        # sam2_checkpoint = "./eval/submission/checkpoint/sam2.1_hiera_large.pt"
+        model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
+        # sam2 = build_sam2(model_cfg, sam2_checkpoint, device=self.device, apply_postprocessing=False)
+        sam2 = build_sam2(model_cfg, MODEL_PATH, device=self.device, apply_postprocessing=False)
+        self.mask_generator_sam2 = SAM2AutomaticMaskGenerator(sam2)
 
         self.memory_size = 2048
         self.n_neighbors = 2
@@ -158,9 +167,7 @@ class Model(nn.Module):
 
         self.feat_size = 64
         self.ori_feat_size = 32
-
         self.visualization = False
-
         self.pushpins_count = 15
 
         self.splicing_connectors_count = [2, 3, 5]  # coresponding to yellow, blue, and red
@@ -179,7 +186,7 @@ class Model(nn.Module):
 
         self.few_shot_inited = False
 
-        from eval.submission.dinov2.dinov2.hub.backbones import dinov2_vitl14
+        from submission.dinov2.dinov2.hub.backbones import dinov2_vitl14
         self.model_dinov2 = dinov2_vitl14()
         self.model_dinov2.to(self.device)
         self.model_dinov2.eval()
@@ -187,14 +194,12 @@ class Model(nn.Module):
         self.vision_width_dinov2 = 1024
 
         # self.stats = pickle.load(open("./src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
-        self.stats = pickle.load(open("./src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
+        self.stats = pickle.load(open("/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
 
         self.mem_instance_masks = None
 
         self.anomaly_flag = False
         self.validation = False  # True #False
-        self.text_prompt = {'breakfast_box': {'box_threshold': 0.25, 'text_threshold': 0.2, 'text_prompt': "almond . apple . container . oatmeal . orange . banana . ", 'background_prompt': ""}, 'juice_bottle': {'box_threshold': 0.3, 'text_threshold': 0.3, 'text_prompt': "alcohol. apple juice. beverage. bottle. liquor. glass bottle. juice. lemonade. liquid. olive oil. orange juice. yellow banana. bottle. glass bottle. glass jar. jug. juice. liquid. milk beverage. bottle. cherry. condiment. liquor. glass bottle. honey. juice. liquid. maple syrup. sauce. syrup. tomato sauce.", 'background_prompt': ""}, 'pushpins': {'box_threshold': 0.3, 'text_threshold': 0.2, 'text_prompt': "pin .", 'background_prompt': "container ."}, 'screw_bag': {'box_threshold': 0.3, 'text_threshold': 0.3, 'text_prompt': "metal bolts. metal hex nuts. metal washers. metal screws. zip-lock bag. screw. ring. metal circle. bag. bolt. container. nut. package. plastic. screw. tool.", 'background_prompt': "zip-lock bag."}, 'splicing_connectors': {'box_threshold': 0.3, 'text_threshold': 0.2, 'text_prompt': "attach. cable. connector. hook. electric outlet. plug. pole. socket. wire.", 'background_prompt': ""}}
-
 
     def set_viz(self, viz):
         self.visualization = viz
@@ -203,6 +208,125 @@ class Model(nn.Module):
         self.validation = val
 
     def histogram(self, image, cluster_feature, proj_patch_token, class_name, path):
+        if self.class_name == 'pushpins':
+            pseudo_labels = kmeans_predict(cluster_feature, self.cluster_centers, 'euclidean', device=self.device) 
+            kmeans_mask = torch.ones_like(pseudo_labels) * (self.classes - 1)    # default to background
+
+            raw_image = to_np_img(image[0]) #[448, 448, 3]
+            height, width = raw_image.shape[:2]
+
+            for pl in pseudo_labels.unique(): 
+                mask = (pseudo_labels == pl).reshape(-1) 
+                # filter small region
+                binary = mask.cpu().numpy().reshape(self.feat_size, self.feat_size).astype(np.uint8) 
+                num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+                for i in range(1, num_labels):
+                    temp_mask = labels == i 
+                    if np.sum(temp_mask) <= 8: 
+                        mask[temp_mask.reshape(-1)] = False
+
+                if mask.any():
+                    region_feature = proj_patch_token[mask, :].mean(0, keepdim=True) 
+                    similarity = (region_feature @ self.query_obj.T)
+                    prob, index = torch.max(similarity, dim=-1)
+                    temp_label = index.squeeze(0).item()
+                    temp_prob = prob.squeeze(0).item()
+                    if temp_prob > self.query_threshold_dict[class_name][temp_label]: # threshold for each class
+                        kmeans_mask[mask] = temp_label  
+
+            kmeans_label = pseudo_labels.view(self.feat_size, self.feat_size).cpu().numpy() 
+            kmeans_mask = kmeans_mask.view(self.feat_size, self.feat_size).cpu().numpy()
+
+            patch_similarity = (proj_patch_token @ self.patch_query_obj.T)
+            patch_mask = patch_similarity.argmax(-1)  
+            patch_mask = patch_mask.view(self.feat_size, self.feat_size).cpu().numpy()
+
+            resized_mask = cv2.resize(kmeans_mask, (width, height), interpolation = cv2.INTER_NEAREST) 
+
+            score = 0. # default to normal
+            self.anomaly_flag = False
+
+            hsv_img = cv2.cvtColor(raw_image, cv2.COLOR_RGB2HSV)
+            _ , s_channel, v_channel = cv2.split(hsv_img)
+
+            # split grid
+            img_grid = cv2.inRange(v_channel, 20, 50)
+            num_lab_g, _ ,stats_g , _ = cv2.connectedComponentsWithStats(img_grid, connectivity=8) #each pushpins room
+
+            # split pin
+            img_pin = cv2.inRange(s_channel, 170, 255)
+            num_lab_p, _ ,stats_p , _ = cv2.connectedComponentsWithStats(img_pin, connectivity=8) #each pushpins
+           
+            # cal area of grid、pin
+            if not self.few_shot_inited:
+                grid_areas_tmp = [stats_g[i, cv2.CC_STAT_AREA] for i in range(1, num_lab_g)]
+                grid_areas_tmp.sort()
+                grid_area = np.mean(grid_areas_tmp[-self.pushpins_count : ])
+
+                pin_areas_tmp = [stats_p[j, cv2.CC_STAT_AREA] for j in range(1, num_lab_p)]
+                pin_area = np.median(pin_areas_tmp)
+
+            # 判断grid是否异常(area、pin数量)
+            if self.few_shot_inited and self.grid_area != 0 and self.pin_area != 0 and self.anomaly_flag is False:
+                error_grids = [i for i in range(1, num_lab_g) if 1.7<=stats_g[i, cv2.CC_STAT_AREA]/self.grid_area<=5]
+                if len(error_grids): 
+                    self.anomaly_flag = True 
+                    print('grid {} area anomaly.'.format(error_grids))
+
+                right_grids = [i for i in range(1, num_lab_p) if 0.7<=stats_p[i, cv2.CC_STAT_AREA]/self.pin_area<=1.3]
+                if len(right_grids) != self.pushpins_count: 
+                   self.anomaly_flag = True
+                   print('number of pushpins: {}, but canonical number of pushpins: {}'.format(len(right_grids), self.pushpins_count))
+
+            img_gray = cv2.cvtColor(raw_image, cv2.COLOR_RGB2GRAY)
+            foreground_thresh = np.percentile(img_gray[img_gray != 0], 15)
+            img_foreground = cv2.inRange(img_gray, foreground_thresh, 255)
+            
+            # pinpixel count per grid
+            nonzero_pixels = cv2.findNonZero(img_foreground)
+            xs = [pt[0][0] for pt in nonzero_pixels]
+            ys = [pt[0][1] for pt in nonzero_pixels]
+
+            min_x, max_x = min(xs), max(xs)
+            min_y, max_y = min(ys), max(ys)
+
+            grid_w = (max_x - min_x + 1) / 5
+            grid_h = (max_y - min_y + 1) / 3
+
+            each_grid_pins_counts = []
+            for row in range(3):
+                for col in range(5):
+                    start_x = min_x + int(col * grid_w)
+                    end_x = min_x + int((col+1) * grid_w)
+                    start_y = min_y + int(row * grid_h)
+                    end_y = min_y + int((row+1) * grid_h)
+
+                    cell_mask = img_pin[start_y:end_y, start_x:end_x]
+
+                    pinpixel_count = np.sum(cell_mask)
+                    each_grid_pins_counts.append(pinpixel_count)
+
+            if self.few_shot_inited and self.each_grid_pins_counts != 0 and self.anomaly_flag is False:
+                for i , pinpixel_counts in enumerate(each_grid_pins_counts):
+                    ratio = pinpixel_counts / self.each_grid_pins_counts
+                    if not (0.4 <= ratio <= 1.6):
+                        print('grid {}: pushpin count ≠ 1'.format(i))
+                        self.anomaly_flag = True
+                        break
+                    
+            # patch hist
+            clip_patch_hist = np.bincount(patch_mask.reshape(-1), minlength=self.patch_query_obj.shape[0])
+            clip_patch_hist = clip_patch_hist / np.linalg.norm(clip_patch_hist)
+
+            if self.few_shot_inited:
+                patch_hist_similarity = (clip_patch_hist @ self.patch_token_hist.T)
+                score = 1 - patch_hist_similarity.max()
+
+            if not self.few_shot_inited:
+                return {"score": score, "clip_patch_hist": clip_patch_hist,  "grid_area": grid_area, "pin_area": pin_area, "each_grid_pins_counts": each_grid_pins_counts}
+            else:
+                return {"score": score, "clip_patch_hist": clip_patch_hist}
+
         def plot_results_only(sorted_anns):
             cur = 1
             img_color = np.zeros((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1]))
@@ -231,57 +355,6 @@ class Model(nn.Module):
 
             merged_a = label_map[a]
             return merged_a
-        
-        def remove_overlapping_boxes(boxes, thr=0.5):
-            """
-            通过计算交并比(IoU)去除重叠的矩形框
-            
-            参数:
-                boxes: 矩形框列表，每个矩形框格式为[xmin, ymin, xmax, ymax]
-                thr: IoU阈值，大于此阈值则认为重叠(默认0.5)
-            
-            返回:
-                去除重叠后的矩形框列表
-            """
-            if not boxes:
-                return []
-            
-            # 将boxes转换为float类型并拷贝，避免修改原始数据
-            boxes = [list(map(float, box)) for box in boxes]
-            
-            # 按矩形面积从大到小排序
-            boxes.sort(key=lambda box: (box[2]-box[0])*(box[3]-box[1]), reverse=True)
-            
-            keep = []  # 保留的矩形框
-            
-            while boxes:
-                current = boxes.pop(0)  # 取出当前最大的框
-                keep.append(current)
-                
-                # 计算剩余框与当前框的IoU，并筛选出IoU小于阈值的框
-                boxes = [box for box in boxes if iou_box(current, box) <= thr]
-            
-            return keep
-
-        def iou_box(box1, box2):
-            # 计算交集区域
-            x1 = max(box1[0], box2[0])
-            y1 = max(box1[1], box2[1])
-            x2 = min(box1[2], box2[2])
-            y2 = min(box1[3], box2[3])
-            
-            # 计算交集面积
-            inter_area = max(0, x2 - x1) * max(0, y2 - y1)
-            
-            # 计算各自面积
-            area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-            area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
-            
-            # 计算并集面积
-            union_area = area1 + area2 - inter_area
-            
-            # 计算IoU
-            return inter_area / union_area if union_area > 0 else 0
 
         pseudo_labels = kmeans_predict(cluster_feature, self.cluster_centers, 'euclidean', device=self.device)
         kmeans_mask = torch.ones_like(pseudo_labels) * (self.classes - 1)  # default to background
@@ -291,123 +364,19 @@ class Model(nn.Module):
         height, width = raw_image.shape[:2]
         time1 = time.time()
         # masks = self.mask_generator.generate(raw_image)
-        
         # 维护数据库
-        '''
         self.db = TensorDictDB(self.class_name)
         result = self.db.get(raw_image)
         if result:
-            print('***Exist in h5!')
             masks = result
         else:
-        '''
-        if True:
-            # masks = self.mask_generator.generate(raw_image)
-            
-            ####
-            # groundingSAM_start
-            sam = self.model_sam
-            predictor = SamPredictor(sam)
-            text_prompt = self.text_prompt[self.class_name]['text_prompt']
-            background_prompt = self.text_prompt[self.class_name]['background_prompt']
-            box_threshold = self.text_prompt[self.class_name]['box_threshold']
-            text_threshold = self.text_prompt[self.class_name]['text_threshold']
-            boxes_filt, pred_phrases = get_grounding_output(
-                self.grounding_model, image[0], text_prompt, box_threshold, text_threshold, device="cuda"
-            )
-
-            background_box = list()
-            for i,text in enumerate(pred_phrases):
-                for j in background_prompt.split('.'):
-                    if j in text.replace(' - ','-') and j != ' ' and j != '':
-                        background_box.append(i)
-
-            predictor.set_image(raw_image)
-
-            H, W = 448, 448
-            for i in range(boxes_filt.size(0)):
-                boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
-                boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
-                boxes_filt[i][2:] += boxes_filt[i][:2]
-
-            boxes_filt = boxes_filt.cpu() # (xmin, ymin, xmax, ymax)
-            transformed_boxes = predictor.transform.apply_boxes_torch(boxes_filt, image.shape[:2]).to(self.device)
-
-            ###
-            # 去重重叠框
-            boxes = boxes_filt.cpu().numpy()
-            boxes_nofiltered = []
-            for i, box in enumerate(boxes):
-                xmin, ymin, xmax, ymax = map(int, box)
-                boxes_nofiltered.append([xmin, ymin, xmax, ymax])
-            
-            boxes_filtered = remove_overlapping_boxes(boxes_nofiltered, thr=0.3)
-            ###
-
-            masks0, _, _ = predictor.predict_torch(
-                point_coords = None,
-                point_labels = None,
-                boxes = transformed_boxes.to(self.device),
-                multimask_output = False,
-            )
-
-            masks = []
-            for mask in masks0:
-                mask = torch.squeeze(mask, dim=0)
-                # resized_tensor = F.interpolate(
-                #     mask.unsqueeze(0).unsqueeze(0),  # 增加 batch 和 channel 维度 (1, 1, 1280, 1600)
-                #     size=(448, 448),
-                #     mode='bilinear',  # 或 'nearest', 'bicubic'
-                # ).squeeze(0).squeeze(0)  # 恢复原始维度 (448, 448)
-                # mask = resized_tensor.cpu().numpy()
-                mask = mask.cpu().numpy()
-                masks.append({'segmentation': mask, 'area': np.sum(mask)})
-            # groundingSAM_end
-            ####
-            
-            # self.db.add(raw_image, masks)
+            if self.class_name == 'juice_bottle':
+                masks = self.mask_generator_sam2.generate(raw_image)
+            else:
+                masks = self.mask_generator_sam.generate(raw_image)
+            self.db.add(raw_image, masks)
         time2 = time.time()
         print("sam time:", time2 - time1)
-
-        ####
-        # cal pushpins num
-        sam = self.model_sam
-        predictor = SamPredictor(sam)
-        text_prompt = self.text_prompt[self.class_name]['text_prompt']
-        background_prompt = self.text_prompt[self.class_name]['background_prompt']
-        box_threshold = self.text_prompt[self.class_name]['box_threshold']
-        text_threshold = self.text_prompt[self.class_name]['text_threshold']
-        boxes_filt, pred_phrases = get_grounding_output(
-            self.grounding_model, image[0], text_prompt, box_threshold, text_threshold, device="cuda"
-        )
-
-        background_box = list()
-        for i,text in enumerate(pred_phrases):
-            for j in background_prompt.split('.'):
-                if j in text.replace(' - ','-') and j != ' ' and j != '':
-                    background_box.append(i)
-
-        predictor.set_image(raw_image)
-
-        H, W = 448, 448
-        for i in range(boxes_filt.size(0)):
-            boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
-            boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
-            boxes_filt[i][2:] += boxes_filt[i][:2]
-
-        boxes_filt = boxes_filt.cpu() # (xmin, ymin, xmax, ymax)
-        transformed_boxes = predictor.transform.apply_boxes_torch(boxes_filt, image.shape[:2]).to(self.device)
-
-        ###
-        # 去重重叠框
-        boxes = boxes_filt.cpu().numpy()
-        boxes_nofiltered = []
-        for i, box in enumerate(boxes):
-            xmin, ymin, xmax, ymax = map(int, box)
-            boxes_nofiltered.append([xmin, ymin, xmax, ymax])
-        
-        boxes_filtered = remove_overlapping_boxes(boxes_nofiltered, thr=0.3)
-        #### 
         
 
         for pl in pseudo_labels.unique():
@@ -428,7 +397,7 @@ class Model(nn.Module):
                 temp_prob = prob.squeeze(0).item()
                 if temp_prob > self.query_threshold_dict[class_name][temp_label]:  # threshold for each class
                     kmeans_mask[mask] = temp_label
-        
+
 
         kmeans_label = pseudo_labels.view(self.feat_size, self.feat_size).cpu().numpy()
         kmeans_mask = kmeans_mask.view(self.feat_size, self.feat_size).cpu().numpy()
@@ -442,7 +411,13 @@ class Model(nn.Module):
 
         resized_mask = cv2.resize(kmeans_mask, (width, height), interpolation=cv2.INTER_NEAREST)
         merge_sam = merge_segmentations(sam_mask, resized_mask, background_class=self.classes - 1)
-
+        '''
+        print('merge_sam: ', merge_sam, merge_sam.shape)
+        if not os.path.exists('merge_mask'):
+            os.mkdir('merge_mask')
+        save_path = 'merge_mask/' + str(len(os.listdir('merge_mask'))) + '.jpg'
+        cv2.imwrite(save_path, merge_sam)
+        '''
         resized_patch_mask = cv2.resize(patch_mask, (width, height), interpolation=cv2.INTER_NEAREST)
         patch_merge_sam = merge_segmentations(sam_mask, resized_patch_mask,
                                               background_class=self.patch_query_obj.shape[0] - 1)
@@ -455,6 +430,9 @@ class Model(nn.Module):
             temp_mask = labels == i
             if np.sum(temp_mask) <= 32:  # 448x448
                 merge_sam[temp_mask] = self.classes - 1  # set to background
+        
+        # save_path = 'merge_mask/' + str(len(os.listdir('merge_mask'))) + '.jpg'
+        # cv2.imwrite(save_path, merge_sam)
 
         # filter small region for patch merge sam
         binary = (patch_merge_sam != (self.patch_query_obj.shape[0] - 1)).astype(np.uint8)  # foreground 1  background 0
@@ -467,69 +445,18 @@ class Model(nn.Module):
         score = 0.  # default to normal
         self.anomaly_flag = False
         instance_masks = []
-        if self.class_name == 'pushpins':
-            # object count hist
-            kernel = np.ones((3, 3), dtype=np.uint8)  # dilate for robustness
-            binary = np.isin(merge_sam, self.foreground_label_idx[self.class_name]).astype(
-                np.uint8)  # foreground 1  background 0
-            dilate_binary = cv2.dilate(binary, kernel)
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilate_binary, connectivity=8)
-            pushpins_count = num_labels - 1  # number of pushpins
-
-            for i in range(1, num_labels):
-                instance_mask = (labels == i).astype(np.uint8)
-                instance_mask = cv2.resize(instance_mask, (self.feat_size, self.feat_size),
-                                           interpolation=cv2.INTER_NEAREST)
-                if instance_mask.any():
-                    instance_masks.append(instance_mask.astype(np.bool_).reshape(-1))
-
-
-            pushpins_count = len(boxes_filtered)
-            if self.few_shot_inited and pushpins_count != self.pushpins_count and self.anomaly_flag is False:
-                self.anomaly_flag = True
-                print('number of pushpins: {}, but canonical number of pushpins: {}'.format(pushpins_count,
-                                                                                            self.pushpins_count))
-
-            # patch hist
-            clip_patch_hist = np.bincount(patch_mask.reshape(-1), minlength=self.patch_query_obj.shape[0])
-            clip_patch_hist = clip_patch_hist / np.linalg.norm(clip_patch_hist)
-
-            if self.few_shot_inited:
-                patch_hist_similarity = (clip_patch_hist @ self.patch_token_hist.T)
-                score = 1 - patch_hist_similarity.max()
-
-            binary_foreground = dilate_binary.astype(np.uint8)
-
-            if len(instance_masks) != 0:
-                instance_masks = np.stack(instance_masks)  # [N, 64x64]
-
-            if self.visualization:
-                image_list = [raw_image, kmeans_label, kmeans_mask, patch_mask, sam_mask, merge_sam, patch_merge_sam,
-                              binary_foreground]
-                title_list = ['raw image', 'k-means', 'kmeans mask', 'patch mask', 'sam mask', 'merge sam mask',
-                              'patch merge sam', 'binary_foreground']
-                for ind, (temp_title, temp_image) in enumerate(zip(title_list, image_list), start=1):
-                    plt.subplot(1, len(image_list), ind)
-                    plt.imshow(temp_image)
-                    plt.title(temp_title)
-                    plt.margins(0, 0)
-                    plt.axis('off')
-                plt.show()
-
-            # todo: same number in total but in different boxes or broken box
-            return {"score": score, "clip_patch_hist": clip_patch_hist, "instance_masks": instance_masks}
-
-        elif self.class_name == 'splicing_connectors':
+        
+        if self.class_name == 'splicing_connectors':
             #  object count hist for default
             sam_mask_max_area = sorted_masks[0]['segmentation']  # background
             binary = (sam_mask_max_area == 0).astype(
                 np.uint8)  # sam_mask_max_area is background,  background 0 foreground 1
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8) # 
             count = 0
-            for i in range(1, num_labels):
-                temp_mask = labels == i
+            for i in range(1, num_labels): # 第0个连通域为背景
+                temp_mask = labels == i # 每个连通域mask
                 if np.sum(temp_mask) <= 64:  # 448x448 64
-                    binary[temp_mask] = 0  # set to background
+                    binary[temp_mask] = 0  # set to background（将小面积连通域置为背景）
                 else:
                     count += 1
             if count != 1 and self.anomaly_flag is False:  # cable cut or no cable or no connector
@@ -537,7 +464,7 @@ class Model(nn.Module):
                     'number of connected component in splicing_connectors: {}, but the default connected component is 1.'.format(
                         count))
                 self.anomaly_flag = True
-
+                
             merge_sam[~(binary.astype(np.bool_))] = self.query_obj.shape[0] - 1  # remove noise
             patch_merge_sam[~(binary.astype(np.bool_))] = self.patch_query_obj.shape[0] - 1  # remove patch noise
 
@@ -896,6 +823,9 @@ class Model(nn.Module):
         splicing_connectors_distance = []
         patch_token_hist = []
         mem_instance_masks = []
+        grid_areas = []
+        pin_areas = []
+        each_grid_pins_counts = []
 
 
         for image, cluster_feature, proj_patch_token in zip(few_shot_samples.chunk(self.k_shot),
@@ -908,7 +838,9 @@ class Model(nn.Module):
             results = self.histogram(image, cluster_feature, proj_patch_token, class_name, None)
             if self.class_name == 'pushpins':
                 patch_token_hist.append(results["clip_patch_hist"])
-                mem_instance_masks.append(results['instance_masks'])
+                grid_areas.append(results['grid_area'])
+                pin_areas.append(results['pin_area'])
+                each_grid_pins_counts.append(results['each_grid_pins_counts'])
 
             elif self.class_name == 'splicing_connectors':
                 foreground_pixel_hist.append(results["foreground_pixel_count"])
@@ -930,6 +862,14 @@ class Model(nn.Module):
                 mem_instance_masks.append(results['instance_masks'])
 
             scores.append(results["score"])
+
+        if len(grid_areas) != 0:
+            self.grid_area = np.mean(grid_areas)
+        if len(pin_areas) != 0:
+            self.pin_area = np.mean(pin_areas)
+        if len(each_grid_pins_counts) != 0:
+            flattened_grid_pixel_hist = np.concatenate(each_grid_pins_counts)
+            self.each_grid_pins_counts = np.mean(flattened_grid_pixel_hist)
 
         if len(foreground_pixel_hist) != 0:
             self.foreground_pixel_hist = np.mean(foreground_pixel_hist)
@@ -965,6 +905,7 @@ class Model(nn.Module):
         self.class_name = class_name
 
         self.k_shot = few_shot_samples.size(0)
+        self.few_shot_inited = False
         self.process(class_name, few_shot_samples, few_shot_paths)
         self.few_shot_inited = True
 
@@ -1081,40 +1022,43 @@ class Model(nn.Module):
         structural_score = np.stack(anomaly_maps_patchcore).mean(0).max()
         anomaly_map_structural = np.stack(anomaly_maps_patchcore).mean(0).reshape(self.feat_size, self.feat_size)
 
-        instance_masks = results["instance_masks"]
-        anomaly_instances_hungarian = []
-        instance_hungarian_match_score = 1.
-        if self.mem_instance_masks is not None and len(instance_masks) != 0:
-            for patch_feature, batch_mem_patch_feature in zip(patch_tokens_clip.chunk(len_feature_list, dim=-1),
-                                                              mem_patch_feature_clip_coreset.chunk(len_feature_list,
-                                                                                                   dim=-1)):
-                instance_features = [patch_feature[mask, :].mean(0, keepdim=True) for mask in instance_masks]
-                instance_features = torch.cat(instance_features, dim=0)
-                instance_features = F.normalize(instance_features, dim=-1)
-                mem_instance_features = []
-                for mem_patch_feature, mem_instance_masks in zip(batch_mem_patch_feature.chunk(self.k_shot),
-                                                                 self.mem_instance_masks):
-                    mem_instance_features.extend(
-                        [mem_patch_feature[mask, :].mean(0, keepdim=True) for mask in mem_instance_masks])
-                mem_instance_features = torch.cat(mem_instance_features, dim=0)
-                mem_instance_features = F.normalize(mem_instance_features, dim=-1)
+        if self.class_name == 'pushpins':
+            results = {'hist_score': hist_score, 'structural_score': structural_score, "anomaly_map_structural": anomaly_map_structural}
 
-                normal_instance_hungarian = (instance_features @ mem_instance_features.T)
-                cost_matrix = (1 - normal_instance_hungarian).cpu().numpy()
+        else:
+            instance_masks = results["instance_masks"]
+            anomaly_instances_hungarian = []
+            instance_hungarian_match_score = 1.
+            if self.mem_instance_masks is not None and len(instance_masks) != 0:
+                for patch_feature, batch_mem_patch_feature in zip(patch_tokens_clip.chunk(len_feature_list, dim=-1),
+                                                                mem_patch_feature_clip_coreset.chunk(len_feature_list,
+                                                                                                    dim=-1)):
+                    instance_features = [patch_feature[mask, :].mean(0, keepdim=True) for mask in instance_masks]
+                    instance_features = torch.cat(instance_features, dim=0)
+                    instance_features = F.normalize(instance_features, dim=-1)
+                    mem_instance_features = []
+                    for mem_patch_feature, mem_instance_masks in zip(batch_mem_patch_feature.chunk(self.k_shot),
+                                                                    self.mem_instance_masks):
+                        mem_instance_features.extend(
+                            [mem_patch_feature[mask, :].mean(0, keepdim=True) for mask in mem_instance_masks])
+                    mem_instance_features = torch.cat(mem_instance_features, dim=0)
+                    mem_instance_features = F.normalize(mem_instance_features, dim=-1)
 
-                row_ind, col_ind = linear_sum_assignment(cost_matrix)
-                cost = cost_matrix[row_ind, col_ind].sum()
-                cost = cost / min(cost_matrix.shape)
-                anomaly_instances_hungarian.append(cost)
+                    normal_instance_hungarian = (instance_features @ mem_instance_features.T)
+                    cost_matrix = (1 - normal_instance_hungarian).cpu().numpy()
 
-            instance_hungarian_match_score = np.mean(anomaly_instances_hungarian)
+                    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+                    cost = cost_matrix[row_ind, col_ind].sum()
+                    cost = cost / min(cost_matrix.shape)
+                    anomaly_instances_hungarian.append(cost)
 
-        results = {'hist_score': hist_score, 'structural_score': structural_score,
-                   'instance_hungarian_match_score': instance_hungarian_match_score,
-                   "anomaly_map_structural": anomaly_map_structural}
+                instance_hungarian_match_score = np.mean(anomaly_instances_hungarian)
+
+            results = {'hist_score': hist_score, 'structural_score': structural_score,
+                    'instance_hungarian_match_score': instance_hungarian_match_score,
+                    "anomaly_map_structural": anomaly_map_structural}
 
         return results
-
 
     def forward(self, image: torch.Tensor) -> dict[str, torch.Tensor]:
         """Forward pass of the model.
@@ -1142,61 +1086,45 @@ class Model(nn.Module):
 
         hist_score = results['hist_score']
         structural_score = results['structural_score']
-        instance_hungarian_match_score = results['instance_hungarian_match_score']
+        # standardization
+        standard_structural_score = (structural_score - self.stats[self.class_name]["structural_scores"]["mean"]) / \
+                                    self.stats[self.class_name]["structural_scores"]["unbiased_std"]
+        if self.class_name == 'pushpins':
+            pred_score = standard_structural_score
 
-        anomaly_map_structural = results['anomaly_map_structural']
+        else:
+            instance_hungarian_match_score = results['instance_hungarian_match_score']
+            standard_instance_hungarian_match_score = (instance_hungarian_match_score -
+                                        self.stats[self.class_name]["instance_hungarian_match_scores"][
+                                        "mean"]) / \
+                                        self.stats[self.class_name]["instance_hungarian_match_scores"][
+                                        "unbiased_std"]
 
-        if self.validation:
-            return {"hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score),
-                    "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
-
+            standard_hist_score = (hist_score - self.stats[self.class_name]["hist_scores"]["mean"]) / self.stats[self.class_name]["hist_scores"]["unbiased_std"]
+            if self.class_name == 'breakfast_box':
+                pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+           
+            elif self.class_name == 'juice_bottle':
+                a1 = 1/(1+7+0)
+                a2 = 7/(1+7+0)
+                a3 = 0
+                pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
+            elif self.class_name == 'screw_bag':
+                a1 = 1/(1+2+16)
+                a2 = 2/(1+2+16)
+                a3 = 16/(1+2+16)
+                pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
+            else:
+                pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+            
         def sigmoid(z):
             return 1 / (1 + np.exp(-z))
 
-        # standardization
-
-        standard_structural_score = (structural_score - self.stats[self.class_name]["structural_scores"]["mean"]) / \
-                                    self.stats[self.class_name]["structural_scores"]["unbiased_std"]
-        standard_instance_hungarian_match_score = (instance_hungarian_match_score -
-                                                   self.stats[self.class_name]["instance_hungarian_match_scores"][
-                                                       "mean"]) / \
-                                                  self.stats[self.class_name]["instance_hungarian_match_scores"][
-                                                      "unbiased_std"]
-
-        '''
-        # ori
-        pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
-        
-        standard_hist_score = (hist_score - self.stats[self.class_name]["hist_scores"]["mean"])/self.stats[self.class_name]["hist_scores"]["unbiased_std"]
-        pred_score = sigmoid(pred_score)
-        '''
-        standard_hist_score = (hist_score - self.stats[self.class_name]["hist_scores"]["mean"]) / self.stats[self.class_name]["hist_scores"]["unbiased_std"]
-        if self.class_name == 'breakfast_box':
-            a1 = 16/(16+4+19)
-            a2 = 4/(16+4+19)
-            a3 = 19/(16+4+19)
-            pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
-           
-        elif self.class_name == 'juice_bottle':
-            a1 = 2/(2+18+1) 
-            a2 = 18/(2+18+1)
-            a3 = 1/(2+18+1)
-            pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
-        elif self.class_name == 'screw_bag':
-            a1 = 1/(1+2+16)
-            a2 = 2/(1+2+16)
-            a3 = 16/(1+2+16)
-            pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
-        else:
-            pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
         pred_score = sigmoid(pred_score)
         if self.anomaly_flag:
             pred_score = 1.
             self.anomaly_flag = False
 
-        #return {"pred_score": torch.tensor(pred_score), "anomaly_map": torch.tensor(anomaly_map_structural),
-        #        "hist_score": torch.tensor(hist_score), "structural_score": torch.tensor(structural_score),
-        #        "instance_hungarian_match_score": torch.tensor(instance_hungarian_match_score)}
         batch_size = image.shape[0]
         pred_score = torch.tensor(pred_score).to(self.device)
         return ImageBatch(image=image, pred_score=pred_score,)
