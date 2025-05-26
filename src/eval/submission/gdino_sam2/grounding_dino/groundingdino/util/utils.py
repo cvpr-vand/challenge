@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from transformers import AutoTokenizer
 
-from grounding_dino.groundingdino.util.slconfig import SLConfig
+from groundingdino.util.slconfig import SLConfig
 
 
 def slprint(x, name="x"):
