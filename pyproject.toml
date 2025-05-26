@@ -5,8 +5,29 @@ description = "VAND 2025 evaluation script"
 readme = "README.md"
 requires-python = "==3.10.12"
 dependencies = [
-    "scikit-learn"
+    "anomalib[full]",
+    "scikit-learn",
+    "addict",
+    "clip",
+    "fairscale",
+    "fiftyone",
+    "ipdb",
+    "opencv-python-headless",
+    "pycocoevalcap",
+    "pycocotools",
+    "supervision",
+    "wget",
+    "yapf",
+    "segment_anything",
+    "segment-anything-hq",
+    "prefetch_generator"
+    # TODO: Add your additional dependencies here
 ]
+
+[tool.uv.sources]
+anomalib = { git = "https://github.com/open-edge-platform/anomalib.git", branch = "main" }
+segment_anything = { git = "https://github.com/facebookresearch/segment-anything.git", branch = "main" }
+
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/eval"]
@@ -26,3 +47,7 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["eval"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
