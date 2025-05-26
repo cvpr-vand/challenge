@@ -36,6 +36,7 @@ dir_path = os.path.dirname(os.path.abspath(__file__))
 cur_path = os.path.join(dir_path, "gdino_sam2")
 #sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2')
 sys.path.append(cur_path)
+print("cur_path:", cur_path)
 
 from sam2.build_sam import build_sam2
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
