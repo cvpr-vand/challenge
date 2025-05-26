@@ -21,8 +21,6 @@ from tqdm import tqdm
 
 from eval.submission.model import Model
 from eval.utils import auto_batch_size
-# from submission.model import Model
-# from utils import auto_batch_size
 
 CATEGORIES = [
     "breakfast_box",
