@@ -131,7 +131,7 @@ class Model(nn.Module):
         '''
         current_dir = os.path.dirname(os.path.abspath(__file__))
         print("current_dir:", current_dir)
-        SAM2_CHECKPOINT = os.path.join(current_dir, "checkpoints/sam2.1_hiera_large.pt")
+        SAM2_CHECKPOINT = os.path.join(current_dir, "checkpoint/sam2.1_hiera_large.pt")
         SAM2_MODEL_CONFIG = "configs/sam2.1/sam2.1_hiera_l.yaml"
         if not os.path.exists(SAM2_CHECKPOINT):
             download_weights_with_requests(

@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-import groundingdino.datasets.transforms as T
+import groundingdino.dataset.transforms as T
 from groundingdino.models import build_model
 from groundingdino.util import box_ops
 from groundingdino.util.slconfig import SLConfig

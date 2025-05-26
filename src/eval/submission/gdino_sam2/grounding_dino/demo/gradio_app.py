@@ -27,7 +27,7 @@ from groundingdino.models import build_model
 from groundingdino.util.slconfig import SLConfig
 from groundingdino.util.utils import clean_state_dict
 from groundingdino.util.inference import annotate, load_image, predict
-import groundingdino.datasets.transforms as T
+import groundingdino.dataset.transforms as T
 
 from huggingface_hub import hf_hub_download
 

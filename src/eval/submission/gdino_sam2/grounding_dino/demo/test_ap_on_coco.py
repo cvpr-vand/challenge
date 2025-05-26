@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, DistributedSampler
 
 from groundingdino.models import build_model
-import groundingdino.datasets.transforms as T
+import groundingdino.dataset.transforms as T
 from groundingdino.util import box_ops, get_tokenlizer
 from groundingdino.util.misc import clean_state_dict, collate_fn
 from groundingdino.util.slconfig import SLConfig
@@ -18,7 +18,7 @@ from groundingdino.util.slconfig import SLConfig
 import torchvision
 
 from groundingdino.util.vl_utils import build_captions_and_token_span, create_positive_map_from_span
-from groundingdino.datasets.cocogrounding_eval import CocoGroundingEvaluator
+from groundingdino.dataset.cocogrounding_eval import CocoGroundingEvaluator
 
 
 def load_model(model_config_path: str, model_checkpoint_path: str, device: str = "cuda"):
