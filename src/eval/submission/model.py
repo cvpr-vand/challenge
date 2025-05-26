@@ -36,6 +36,7 @@ dir_path = os.path.dirname(os.path.abspath(__file__))
 cur_path = os.path.join(dir_path, "gdino_sam2")
 #sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2')
 sys.path.append(cur_path)
+
 from sam2.build_sam import build_sam2
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 from sam2.sam2_image_predictor import SAM2ImagePredictor
@@ -52,27 +53,6 @@ def to_np_img(m):
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
-
-def download_weights_with_requests(url, save_path):
-    """
-    使用 requests 下载权重文件
-
-    参数:
-        url: 下载链接
-        save_path: 保存路径（包含文件名）
-    """
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
-    try:
-        response = requests.get(url, stream=True)
-        response.raise_for_status()  # 检查请求是否成功
-
-        with open(save_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print(f"权重文件已下载到: {save_path}")
-    except Exception as e:
-        print(f"下载失败: {e}")
 
 class Model(nn.Module):
     """TODO: Implement your model here"""
@@ -123,12 +103,11 @@ class Model(nn.Module):
 
         #self.model_sam = sam_model_registry["vit_h"](checkpoint="./submission/checkpoint/sam_vit_h_4b8939.pth").to(self.device)
         self.mask_generator_sam = SamAutomaticMaskGenerator(model=self.model_sam)
+        
+        #sam2_checkpoint = "./submission/checkpoint/sam2.1_hiera_large.pt"
+        #model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
+        #sam2 = build_sam2(model_cfg, sam2_checkpoint, device=self.device, apply_postprocessing=False)
 
-        '''
-        sam2_checkpoint = "./submission/checkpoint/sam2.1_hiera_large.pt"
-        model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
-        sam2 = build_sam2(model_cfg, sam2_checkpoint, device=self.device, apply_postprocessing=False)
-        '''
         current_dir = os.path.dirname(os.path.abspath(__file__))
         print("current_dir:", current_dir)
         SAM2_CHECKPOINT = os.path.join(current_dir, "checkpoint/sam2.1_hiera_large.pt")
@@ -229,10 +208,7 @@ class Model(nn.Module):
         #self.stats = pickle.load(open("/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
         current_dir = os.path.dirname(os.path.abspath(__file__))
         val_path = os.path.join(current_dir, "memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl")
-
         self.stats = pickle.load(open(val_path, "rb"))
-
-
 
         self.mem_instance_masks = None
 
@@ -275,7 +251,7 @@ class Model(nn.Module):
         self.model_eva02.eval()
         # dinov2_pretrained_cfg = {"file": "models/vit_large_patch14_dinov2.lvd142m/model.safetensors"}
         #dinov2_pretrained_cfg = {"file": "submission/vit_large_patch14_dinov2.lvd142m/model.safetensors"}
-        self.model_dinov2 = create_model('vit_large_patch14_dinov2.lvd142m', pretrained=True, num_classes=0, img_size=self.image_size).to(self.device)
+        self.model_dinov2_yy = create_model('vit_large_patch14_dinov2.lvd142m', pretrained=True, num_classes=0, img_size=self.image_size).to(self.device)
         #self.model_dinov2_yy = create_model('vit_large_patch14_dinov2.lvd142m', pretrained=True,pretrained_cfg=dinov2_pretrained_cfg, num_classes=0,img_size=self.image_size).to(self.device)
         self.model_dinov2_yy.eval()
         self.gdino_init = False
@@ -1122,7 +1098,7 @@ class Model(nn.Module):
         #few_shot_paths = setup_data.get("few_shot_samples_path")
         self.class_name = class_name
 
-        if self.class_name == "screw_bag":
+        if self.class_name == "screw_bag" or self.class_name == "breakfast_box":
             if not self.gdino_init:
                 self.mask_generator = GSAM2Predictor()
                 self.gdino_init = True
@@ -1469,6 +1445,97 @@ class Model(nn.Module):
 
         return anomaly_map_ret_part, subcategory_mean_dists
 
+    def save_results_to_csv(image_path,
+                            anomaly_map_ret_dinov2,
+                            anomaly_map_ret_eva02,
+                            dinov2_anomaly_map_ret_part,
+                            dinov2_subcategory_mean_dists,
+                            eva02_anomaly_map_ret_part,
+                            eva02_subcategory_mean_dists,
+                            area_hist_avg, color_hist_avg,
+                            flag,
+                            output_path="results.csv"):
+
+        # 准备CSV文件名(带时间戳)
+        csv_filename = output_path
+
+        # 检查文件是否存在，决定是否写入表头
+        write_header = not os.path.exists(csv_filename)
+
+        # 准备数据行
+        row_data = {
+            "image_path": image_path,
+            "anomaly_map_ret_dinov2": anomaly_map_ret_dinov2,
+            "anomaly_map_ret_eva02": anomaly_map_ret_eva02,
+            "dinov2_anomaly_map_ret_part": dinov2_anomaly_map_ret_part,
+            "dinov2_subcategory_mean_dists": dinov2_subcategory_mean_dists,
+            "eva02_anomaly_map_ret_part": eva02_anomaly_map_ret_part,
+            "eva02_subcategory_mean_dists": eva02_subcategory_mean_dists,
+            "flag": flag,
+        }
+
+        # 添加area_hist_avg的每个元素作为单独列
+        for i, val in enumerate(area_hist_avg):
+            row_data[f"area_hist_avg_{i}"] = val
+
+        # 添加color_hist_avg的每个元素作为单独列
+        for i, val in enumerate(color_hist_avg):
+            row_data[f"color_hist_avg_{i}"] = val
+
+        # 写入CSV文件
+        with open(csv_filename, 'a', newline='') as csvfile:
+            fieldnames = row_data.keys()
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+            if write_header:
+                writer.writeheader()
+
+            writer.writerow(row_data)
+
+    def calculate_hole_radii_connected_components(self, mask_image):
+        mask_image = cv2.resize(mask_image, (1600, 1100), interpolation=cv2.INTER_NEAREST)
+        kernel = np.ones((5, 5), np.uint8)
+        mask_image = cv2.erode(mask_image, kernel, iterations=1)
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask_image, connectivity=8)
+        min_size = 300
+        for i in range(1, num_labels):
+            if stats[i, cv2.CC_STAT_AREA] < min_size:
+                labels[labels == i] = 0
+        results = []
+        if num_labels < 5:
+            return results
+
+        for label in range(1, num_labels):
+            component_mask = (labels == label).astype(np.uint8) * 255
+            contours, hierarchy = cv2.findContours(
+                component_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
+            )
+
+            if len(contours) == 0:
+                continue
+
+            outer_contours = [contours[i] for i in range(len(contours)) if hierarchy[0][i][3] == -1]
+            if not outer_contours:
+                continue
+
+            # 孔洞轮廓（hierarchy[i][3]!=-1）
+            hole_contours = [contours[i] for i in range(len(contours)) if hierarchy[0][i][3] != -1]
+            hole_radius = 0.0
+
+            if hole_contours:
+                # 取面积最大的孔洞（假设主空心区域）
+                largest_hole = max(hole_contours, key=cv2.contourArea)
+                hole_mask = np.zeros_like(component_mask)
+                cv2.drawContours(hole_mask, [largest_hole], -1, 255, -1)
+
+                # 距离变换法求最大内接圆半径
+                dist_transform = cv2.distanceTransform(hole_mask, cv2.DIST_L2, 3)
+                _, max_val, _, _ = cv2.minMaxLoc(dist_transform)
+                hole_radius = max_val
+
+            results.append(float(hole_radius))
+        return results
+
     def forward(self, batch: torch.Tensor) -> dict[str, torch.Tensor]:
         """Forward pass of the model.
 
@@ -1486,18 +1553,71 @@ class Model(nn.Module):
             pred_score=torch.zeros(batch_size, device=image.device),
         )
         '''
-        if self.class_name == "screw_bag":
+        if self.class_name == "screw_bag" or self.class_name == "breakfast_box":
             self.scew_bag_abnormal_flag = 0
+            self.breakfast_box_abnormal_flag = 0
             heatmap_cache = dict()
             area_hist = list()
             color_hist = list()
             if self.gdino_init:
                 clusted_masks, boxes, label_ids, pil_img = self.generate_mask(batch[0])
-                # 转换为LAB色彩空间
+                if self.class_name == "breakfast_box":
+                    rgb_img = np.array(pil_img)
+                    binary = clusted_masks[4]
+                    avg_color = []
+                    if np.sum(binary > 0) > 100:
+                        for channel in range(rgb_img.shape[2]):
+                            channel_avg = np.mean(rgb_img[:, :, channel][binary > 0])
+                            avg_color.append(float(channel_avg))
+                        if avg_color[0] > 160 or avg_color[0] < 90 or avg_color[2] > 65 or avg_color[2] < 40:
+
+                            self.breakfast_box_abnormal_flag = 1
+
+                if self.class_name == "screw_bag":
+                    binary = clusted_masks[-1]
+                    if np.sum(binary > 0) > 100:
+                        mask_image = cv2.resize(binary, (1600, 1100), interpolation=cv2.INTER_NEAREST)
+                        kernel = np.ones((3, 3), np.uint8)
+                        mask_image = cv2.erode(mask_image, kernel, iterations=1)
+                        contours, _ = cv2.findContours(
+                            mask_image.astype(np.uint8),
+                            cv2.RETR_EXTERNAL,
+                            cv2.CHAIN_APPROX_SIMPLE
+                        )
+                        if len(contours) >= 2:
+                            lengths = []
+                            sorted_contours = sorted(contours, key=cv2.contourArea, reverse=True)[:2]
+                            for contour in sorted_contours:
+                                rotated_rect = cv2.minAreaRect(contour)
+                                width, height = rotated_rect[1]
+                                lengths.append(max(width, height))
+                            longer = max(lengths)
+                            shorter = min(lengths)
+                            ratio = (longer - shorter) / (longer + 1e-7)
+                            if ratio < 0.25:
+                                self.scew_bag_abnormal_flag = 1
+                    # 螺母和垫片
+                    binary = clusted_masks[-2]
+                    if np.sum(binary > 0) > 100:
+                        results = self.calculate_hole_radii_connected_components(binary)
+                        if len(results) > 0:
+                            results.sort(reverse=True)
+                            circles = list()
+                            nuts = list()
+                            for i, res in enumerate(results):
+                                if res < 10:
+                                    continue
+                                if res > 30:
+                                    circles.append(i)
+                                else:
+                                    nuts.append(i)
+                            if (len(circles) + len(nuts) >= 4) and len(circles) != 2 or len(nuts) != 2:
+                                self.scew_bag_abnormal_flag = 1
+
                 imglabo = cv2.cvtColor(np.array(pil_img), cv2.COLOR_BGR2LAB)
-                color_a = imglabo[:, :, 1].astype(np.float32)  # 使用float32提高精度
+                color_a = imglabo[:, :, 1].astype(np.float32)
                 color_b = imglabo[:, :, 2].astype(np.float32)
-                epsilon = 1e-7  # 更小的除数保护值
+                epsilon = 1e-7
                 color_ratio_sq = (color_b / (color_a + epsilon)) ** 2
                 for cat_id, mask in enumerate(clusted_masks):
                     heatmap_cache[f"./outputs/{self.class_name}/test/000/mask_{cat_id}.png"] = mask
@@ -1506,47 +1626,72 @@ class Model(nn.Module):
                     masked_color = color_ratio_sq * mask
                     color_value = np.sum(masked_color) / (area + epsilon)
                     color_hist.append(color_value)
-                    if self.vis:
-                        path = f"./outputs/{self.class_name}/test/000/img.png"
-                        os.makedirs(os.path.dirname(path), exist_ok=True)
-                        pil_img.save(path)
-                        for cat_id, mask in enumerate(clusted_masks):
-                            path = f"./outputs/{self.class_name}/test/000/mask_{cat_id}.png"
 
-                            cv2.imwrite(path, mask * 255)
+
             area_hist_avg = np.array(area_hist) / self.class_hists_train
             color_hist_avg = np.array(color_hist) / self.class_color_train
+
             transformed_image = self.transform_dino(batch)
+            test_patch_tokens_dinov2 = self.model_dinov2_yy.forward_intermediates(transformed_image,
+                                                                               indices=self.out_layers,
+                                                                               intermediates_only=True)
+            test_patch_tokens_dinov2 = [
+                F.interpolate(p, size=self.perform_grid_size, mode="bilinear", align_corners=True) for p in
+                test_patch_tokens_dinov2]
+            test_patch_tokens_dinov2 = [p.permute(0, 2, 3, 1).view(-1, self.perform_grid_size ** 2, self.embedding_dim)
+                                        for p in test_patch_tokens_dinov2]
+            anomaly_map_ret_dinov2 = self.compute_anomaly_maps(test_patch_tokens_dinov2,
+                                                               self.dinov2_normal_patch_tokens)
 
-            test_patch_tokens_dinov2 = self.model_dinov2_yy.forward_intermediates(transformed_image,indices=self.out_layers,intermediates_only=True)
-            test_patch_tokens_dinov2 = [F.interpolate(p, size=self.perform_grid_size, mode="bilinear", align_corners=True) for p in test_patch_tokens_dinov2]
-            test_patch_tokens_dinov2 = [p.permute(0, 2, 3, 1).view(-1, self.perform_grid_size ** 2, self.embedding_dim) for p in test_patch_tokens_dinov2]
-            anomaly_map_ret_dinov2 = self.compute_anomaly_maps(test_patch_tokens_dinov2, self.dinov2_normal_patch_tokens)
-
-            test_patch_tokens_eva02 = self.model_eva02.forward_intermediates(transformed_image, indices=self.out_layers, intermediates_only=True)
-            test_patch_tokens_eva02 = [ F.interpolate(p, size=self.perform_grid_size, mode="bilinear", align_corners=True) for p in test_patch_tokens_eva02]
-            test_patch_tokens_eva02 = [p.permute(0, 2, 3, 1).view(-1, self.perform_grid_size ** 2, self.embedding_dim) for p in test_patch_tokens_eva02]
+            test_patch_tokens_eva02 = self.model_eva02.forward_intermediates(transformed_image, indices=self.out_layers,
+                                                                             intermediates_only=True)
+            test_patch_tokens_eva02 = [
+                F.interpolate(p, size=self.perform_grid_size, mode="bilinear", align_corners=True) for p in
+                test_patch_tokens_eva02]
+            test_patch_tokens_eva02 = [p.permute(0, 2, 3, 1).view(-1, self.perform_grid_size ** 2, self.embedding_dim)
+                                       for p in test_patch_tokens_eva02]
             anomaly_map_ret_eva02 = self.compute_anomaly_maps(test_patch_tokens_eva02, self.eva02_normal_patch_tokens)
 
             dinov2_anomaly_map_ret_part, dinov2_subcategory_mean_dists = self.calculate_subcategory_metrics(
-                test_patch_tokens_dinov2, heatmap_cache, self.selected_features_dinov2,self.part_normal_patch_tokens_dinov2
+                test_patch_tokens_dinov2, heatmap_cache, self.selected_features_dinov2,
+                self.part_normal_patch_tokens_dinov2
             )
             eva02_anomaly_map_ret_part, eva02_subcategory_mean_dists = self.calculate_subcategory_metrics(
-                test_patch_tokens_eva02, heatmap_cache, self.selected_features_eva02, self.part_normal_patch_tokens_eva02
+                test_patch_tokens_eva02, heatmap_cache, self.selected_features_eva02,
+                self.part_normal_patch_tokens_eva02
             )
-            return ImageBatch(
-                image=batch,
-                pred_score=torch.tensor(
+
+            if self.class_name == "screw_bag":
+                return ImageBatch(
+                    image = batch,
+                    pred_score =  torch.tensor(
                     20 * anomaly_map_ret_dinov2.max().item() +
                     10 * anomaly_map_ret_eva02.max().item() +
-                    20 * dinov2_anomaly_map_ret_part.max().item() +
-                    25 * dinov2_subcategory_mean_dists.max().item() +
-                    5 * eva02_anomaly_map_ret_part.max().item() +
-                    25 * eva02_subcategory_mean_dists.max().item() +
-                    30 * abs(area_hist_avg[1] - 1) +
-                    30 * abs(area_hist_avg[2] - 1)
-                ).to(self.device)
-            )
+                    10 * dinov2_anomaly_map_ret_part.max().item() +
+                    10 * dinov2_subcategory_mean_dists.max().item() +
+                    10 * eva02_anomaly_map_ret_part.max().item() +
+                    10 * eva02_subcategory_mean_dists.max().item() +
+                    25 * abs(area_hist_avg[1] - 1) +
+                    25 * abs(area_hist_avg[2] - 1) +
+                    15 * self.scew_bag_abnormal_flag
+                    ).to(self.device)
+                )
+
+            else:
+                return ImageBatch(
+                    image = batch,
+                    pred_score = torch.tensor(
+                        30 * anomaly_map_ret_dinov2.max().item() +
+                        30 * anomaly_map_ret_eva02.max().item() +
+                        10 * abs(area_hist_avg.min() - 1) +
+                        5 * abs(area_hist_avg.max() - 1) +
+                        5 * abs(color_hist_avg.min() - 1) +
+                        5 * abs(color_hist_avg[-1] - 1) +
+                        5 * self.breakfast_box_abnormal_flag
+                    ).to(self.device)
+                )
+
+
         else:
             self.anomaly_flag = False
             batch = self.transform(batch).to(self.device)
