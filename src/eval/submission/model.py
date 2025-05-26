@@ -54,6 +54,28 @@ def to_np_img(m):
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
+
+def download_weights_with_requests(url, save_path):
+    """
+    使用 requests 下载权重文件
+
+    参数:
+        url: 下载链接
+        save_path: 保存路径（包含文件名）
+    """
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # 检查请求是否成功
+
+        with open(save_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print(f"权重文件已下载到: {save_path}")
+    except Exception as e:
+        print(f"下载失败: {e}")
+        
 class Model(nn.Module):
     """TODO: Implement your model here"""
 
