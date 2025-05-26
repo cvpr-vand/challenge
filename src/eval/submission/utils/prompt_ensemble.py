@@ -3,7 +3,7 @@ from typing import Union, List
 import torch
 import numpy as np
 from tqdm import tqdm
-from eval.submission.utils.imagenet_template import openai_imagenet_template
+from submission.utils.imagenet_template import openai_imagenet_template
 
 
 def encode_text_with_prompt_ensemble(model, objs, tokenizer, device):

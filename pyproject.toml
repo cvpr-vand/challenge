@@ -11,7 +11,6 @@ dependencies = [
     "opencv-python==4.10.0.82",
     "numpy==1.26.4",
     "wget==3.0",
-    "segment_anything",
     "kmeans_pytorch",
     "h5py",
     "addict==2.4.0",
@@ -30,7 +29,6 @@ dependencies = [
 
 [tool.uv.sources]
 anomalib = { git = "https://github.com/openvinotoolkit/anomalib.git", branch = "main" }
-segment_anything = {git = "https://github.com/facebookresearch/segment-anything.git", branch = "main"}
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/eval"]

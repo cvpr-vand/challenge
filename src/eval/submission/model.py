@@ -15,7 +15,7 @@ import pickle
 from scipy.stats import norm
 
 #import open_clip_local as open_clip
-import eval.submission.open_clip_local as open_clip
+import submission.open_clip_local as open_clip
 import cv2
 import numpy as np
 import torch.nn.functional as F
@@ -29,14 +29,19 @@ import os
 import json
 from typing import List, Dict, Any
 import random
+from timm import create_model
+
 import sys
 dir_path = os.path.dirname(os.path.abspath(__file__))
-cur_path = os.path.join(dir_path, "sam2")
+cur_path = os.path.join(dir_path, "gdino_sam2")
+#sys.path.append('/home/user/actions-runner/_work/challenge/challenge/src/eval/submission/gdino_sam2')
 sys.path.append(cur_path)
-
 from sam2.build_sam import build_sam2
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+from sam2.sam2_image_predictor import SAM2ImagePredictor
 
+from eval.submission.gdino_sam2.interface import GSAM2Predictor
+import requests
 
 def to_np_img(m):
     m = m.permute(1, 2, 0).cpu().numpy()
@@ -45,6 +50,8 @@ def to_np_img(m):
     m  = m * std + mean
     return np.clip((m * 255.), 0, 255).astype(np.uint8)
 
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
 
 def download_weights_with_requests(url, save_path):
     """
@@ -114,7 +121,7 @@ class Model(nn.Module):
             print(f"Model saved to {MODEL_PATH}")
         self.model_sam = sam_model_registry["vit_h"](checkpoint=MODEL_PATH)
 
-        #self.model_sam = sam_model_registry["vit_h"](checkpoint="/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/checkpoint/sam_vit_h_4b8939.pth").to(self.device)
+        #self.model_sam = sam_model_registry["vit_h"](checkpoint="./submission/checkpoint/sam_vit_h_4b8939.pth").to(self.device)
         self.mask_generator_sam = SamAutomaticMaskGenerator(model=self.model_sam)
 
         '''
@@ -136,6 +143,9 @@ class Model(nn.Module):
         sam2 = build_sam2(model_cfg, sam2_checkpoint, device=self.device, apply_postprocessing=False)
 
         self.mask_generator_sam2 = SAM2AutomaticMaskGenerator(sam2)
+        sam2_predictor = SAM2ImagePredictor(sam2)
+
+        self.img_size = 448
 
         self.memory_size = 2048
         self.n_neighbors = 2
@@ -189,7 +199,6 @@ class Model(nn.Module):
             "pushpins": [0.2, 0., 0., 0.],
             "screw_bag": [0., 0., 0., ],
         }
-
         self.feat_size = 64
         self.ori_feat_size = 32
         self.visualization = False
@@ -211,20 +220,72 @@ class Model(nn.Module):
 
         self.few_shot_inited = False
 
-        from eval.submission.dinov2.dinov2.hub.backbones import dinov2_vitl14
+        from submission.dinov2.dinov2.hub.backbones import dinov2_vitl14
         self.model_dinov2 = dinov2_vitl14()
         self.model_dinov2.to(self.device)
         self.model_dinov2.eval()
         self.feature_list_dinov2 = [6, 12, 18, 24]
         self.vision_width_dinov2 = 1024
-
-        self.stats = pickle.load(open("./eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
         #self.stats = pickle.load(open("/workspace/MyDeptEDS/srj/2025_competition/challenge-main/LogSAD/src/eval/submission/memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl", "rb"))
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        val_path = os.path.join(current_dir, "memory_bank/statistic_scores_model_ensemble_few_shot_val.pkl")
+
+        self.stats = pickle.load(open(val_path, "rb"))
+
+
 
         self.mem_instance_masks = None
 
         self.anomaly_flag = False
         self.validation = False  # True #False
+
+        ###yangye
+        self.image_size = 448
+        self.out_layers = [5, 11, 17, 23]
+        self.embedding_dim = 1024
+        self.perform_grid_size = 64
+        self.transform_dino = v2.Compose(
+            [
+                v2.Resize((self.image_size, self.image_size)),
+                v2.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+            ],
+        )
+        self.objs_dict = {
+            # 5 大类别
+            "breakfast_box": [["white box"], ["orange",  "orange peach"], ["peach",], ["oatmeal"], ["banana chips", "almonds", "banana chips almonds "]],
+            # 5 大类别
+            "juice_bottle": [["glass bottle"], ["cherry", "orange", "banana"], ["label", "tag", "label tag"]],
+            # 两个类别
+            "pushpins": [["tools"]],
+            # 3个类别
+            "screw_bag": [["plastic bag"], ["metal circle", "circle"], ["long bolts", "bolt"]],
+            # 2个类别
+            "splicing_connectors": [["connector"]],
+        }
+        self.foreground_num = {  # for query_words_dict
+            "breakfast_box": 5,
+            "juice_bottle": 3,
+            "pushpins": 2,
+            "screw_bag": 3,
+            "splicing_connectors":2
+        }
+        #eva02_pretrained_cfg = {"file": "submission/eva02_large_patch14_clip_336.merged2b_s6b_b61k/open_clip_model.safetensors"}
+        self.model_eva02 = create_model('eva02_large_patch14_clip_336', pretrained=True, num_classes=768, img_size=self.image_size).to(self.device)
+        #self.model_eva02 = create_model('eva02_large_patch14_clip_336', pretrained=True,pretrained_cfg=eva02_pretrained_cfg, num_classes=768,img_size=self.image_size).to(self.device)
+        self.model_eva02.eval()
+        # dinov2_pretrained_cfg = {"file": "models/vit_large_patch14_dinov2.lvd142m/model.safetensors"}
+        #dinov2_pretrained_cfg = {"file": "submission/vit_large_patch14_dinov2.lvd142m/model.safetensors"}
+        self.model_dinov2 = create_model('vit_large_patch14_dinov2.lvd142m', pretrained=True, num_classes=0, img_size=self.image_size).to(self.device)
+        #self.model_dinov2_yy = create_model('vit_large_patch14_dinov2.lvd142m', pretrained=True,pretrained_cfg=dinov2_pretrained_cfg, num_classes=0,img_size=self.image_size).to(self.device)
+        self.model_dinov2_yy.eval()
+        self.gdino_init = False
+        self.vis = False
+        self.class_hists_train = None
+        self.class_color_train = None
+        self.mask_generator = GSAM2Predictor(sam2_predictor)
+        self.gdino_init = True
+
+
 
     def set_viz(self, viz):
         self.visualization = viz
@@ -436,13 +497,7 @@ class Model(nn.Module):
 
         resized_mask = cv2.resize(kmeans_mask, (width, height), interpolation=cv2.INTER_NEAREST)
         merge_sam = merge_segmentations(sam_mask, resized_mask, background_class=self.classes - 1)
-        '''
-        print('merge_sam: ', merge_sam, merge_sam.shape)
-        if not os.path.exists('merge_mask'):
-            os.mkdir('merge_mask')
-        save_path = 'merge_mask/' + str(len(os.listdir('merge_mask'))) + '.jpg'
-        cv2.imwrite(save_path, merge_sam)
-        '''
+
         resized_patch_mask = cv2.resize(patch_mask, (width, height), interpolation=cv2.INTER_NEAREST)
         patch_merge_sam = merge_segmentations(sam_mask, resized_patch_mask,
                                               background_class=self.patch_query_obj.shape[0] - 1)
@@ -455,9 +510,6 @@ class Model(nn.Module):
             temp_mask = labels == i
             if np.sum(temp_mask) <= 32:  # 448x448
                 merge_sam[temp_mask] = self.classes - 1  # set to background
-        
-        # save_path = 'merge_mask/' + str(len(os.listdir('merge_mask'))) + '.jpg'
-        # cv2.imwrite(save_path, merge_sam)
 
         # filter small region for patch merge sam
         binary = (patch_merge_sam != (self.patch_query_obj.shape[0] - 1)).astype(np.uint8)  # foreground 1  background 0
@@ -472,24 +524,112 @@ class Model(nn.Module):
         instance_masks = []
         
         if self.class_name == 'splicing_connectors':
-            #  object count hist for default
+            ######
+            # 交点位置判断
+            def cal_dist(binary):
+                num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary)
+                for i in range(1, num_labels):
+                    temp_mask = labels == i
+                    if np.sum(temp_mask) <= 64: # 448x448 64
+                        binary[temp_mask] = 0 # set to background (del 小连通域)
+
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 20)) # 15, 15
+                rect_mask = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
+                # 使用连通域分析统计矩形个数(连通域数量含背景)
+                num_labels_rects, labels_rects, stats_rects, _ = cv2.connectedComponentsWithStats(rect_mask, connectivity=8) # 仅保留两端
+                only_line = cv2.subtract(binary, rect_mask)
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+                only_line = cv2.morphologyEx(only_line, cv2.MORPH_OPEN, kernel_open)
+                num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(only_line, connectivity=8)
+                min_area = 1000  # 面积阈值
+                final_line = np.zeros_like(only_line)
+                for i in range(1, num_labels):  # 跳过背景
+                    if stats[i, cv2.CC_STAT_AREA] >= min_area:
+                        final_line[labels == i] = 255
+                        
+                num_labels_line, labels_line, stats_line, _ = cv2.connectedComponentsWithStats(final_line, connectivity=8)
+                # 4. 找到直线的两个端点（即交点）
+                nonzero_cols = np.where(np.any(final_line, axis=0))[0]  # 所有包含非零像素的列
+                if len(nonzero_cols) > 0 and num_labels_rects == 3 and num_labels_line == 2:
+                    try:
+                        left_x = nonzero_cols[0]    # 最左点 x 坐标
+                        right_x = nonzero_cols[-1] # 最右点 x 坐标
+                        # 找到对应 y 坐标（取该列中间位置）
+                        left_y = np.mean(np.where(final_line[:, left_x] > 0)[0])
+                        right_y = np.mean(np.where(final_line[:, right_x] > 0)[0])
+                        left_box = stats_rects[1,:-1]
+                        right_box = stats_rects[2,:-1]
+                        if left_box[0] > right_box[0]:
+                            left_box, right_box = right_box, left_box
+                        
+                        
+                        left_box_ymin = left_box[1]
+                        left_box_ymax = left_box[1] + left_box[3]
+                        left_box_ycenter = (left_box_ymin + left_box_ymax) / 2
+                        dist1 = left_y - left_box_ycenter
+                        # left_top = abs(left_y - left_box_ymin)
+                        # left_bottom = abs(left_box_ymax - left_y)
+                        # dist1 = abs(left_top - left_bottom)
+                        
+                        right_box_ymin = right_box[1]
+                        right_box_ymax = right_box[1] + right_box[3]
+                        right_box_ycenter = (right_box_ymin + right_box_ymax) / 2
+                        dist2 = right_y - right_box_ycenter
+                        # right_top = abs(right_y - right_box_ymin)
+                        # right_bottom = abs(right_box_ymax - right_y)
+                        # dist2 = abs(right_top - right_bottom)
+                        print(dist1, dist2, dist2-dist1)
+
+                        return abs(dist1-dist2)
+                    except:
+                        return 0
+                else:
+                    return 0
+                
+            def cal_component_num(binary): # 计算组件数量
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)) # 15, 15
+                binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
+                num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8) # 
+
+                component_count = 0 # 良品为1
+                for i in range(1, num_labels): # 第0个连通域为背景
+                    temp_mask = labels == i # 每个连通域mask
+                    if np.sum(temp_mask) <= 64:  # 448x448 64
+                        binary[temp_mask] = 0  # set to background（将小面积连通域置为背景）
+                    else:
+                        component_count += 1
+
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 20)) # 15, 15
+                rect_mask = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
+                # 使用连通域分析统计矩形个数(连通域数量含背景)
+                num_labels_rects, labels_rects, stats_rects, _ = cv2.connectedComponentsWithStats(rect_mask, connectivity=8) # 仅保留两端
+                only_line = cv2.subtract(binary, rect_mask)
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+                only_line = cv2.morphologyEx(only_line, cv2.MORPH_OPEN, kernel_open)
+                num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(only_line, connectivity=8)
+                min_area = 1000  # 面积阈值
+                final_line = np.zeros_like(only_line)
+                for i in range(1, num_labels):  # 跳过背景
+                    if stats[i, cv2.CC_STAT_AREA] >= min_area:
+                        final_line[labels == i] = 255
+                num_labels_line, labels_line, stats_line, _ = cv2.connectedComponentsWithStats(final_line, connectivity=8)
+                return component_count, num_labels_rects-1, num_labels_line-1 # mask中连通域数量、两端连接器数量、线缆数量（良品对应三项数量：1，2，1）('-1'因为第0个连通域为背景)
+
             sam_mask_max_area = sorted_masks[0]['segmentation']  # background
             binary = (sam_mask_max_area == 0).astype(
                 np.uint8)  # sam_mask_max_area is background,  background 0 foreground 1
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8) # 
-            count = 0
-            for i in range(1, num_labels): # 第0个连通域为背景
-                temp_mask = labels == i # 每个连通域mask
-                if np.sum(temp_mask) <= 64:  # 448x448 64
-                    binary[temp_mask] = 0  # set to background（将小面积连通域置为背景）
-                else:
-                    count += 1
-            if count != 1 and self.anomaly_flag is False:  # cable cut or no cable or no connector
-                print(
-                    'number of connected component in splicing_connectors: {}, but the default connected component is 1.'.format(
-                        count))
+            dist = cal_dist(binary)
+            if dist > 30:
                 self.anomaly_flag = True
-                
+            ######
+
+            #  object count hist for default
+            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+            component_count, connector_count, line_count = cal_component_num(binary)
+            if (component_count != 1 or connector_count != 2 or line_count != 1) and self.anomaly_flag is False:
+                self.anomaly_flag = True
+
+            
             merge_sam[~(binary.astype(np.bool_))] = self.query_obj.shape[0] - 1  # remove noise
             patch_merge_sam[~(binary.astype(np.bool_))] = self.patch_query_obj.shape[0] - 1  # remove patch noise
 
@@ -541,13 +681,13 @@ class Model(nn.Module):
             idx_color = (cable_feature @ query_cable_color.T).argmax(-1).squeeze(0).item()
             foreground_pixel_count = np.sum(erode_binary) / self.splicing_connectors_count[idx_color]
 
-            slice_cable = binary[:, int(w / 2) - 1: int(w / 2) + 1]
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(slice_cable, connectivity=8)
-            cable_count = num_labels - 1
-            if cable_count != 1 and self.anomaly_flag is False:  # two cables
-                print('number of cable count in splicing_connectors: {}, but the default cable count is 1.'.format(
-                    cable_count))
-                self.anomaly_flag = True
+            # slice_cable = binary[:, int(w / 2) - 1: int(w / 2) + 1]
+            # num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(slice_cable, connectivity=8)
+            # cable_count = num_labels - 1
+            # if cable_count != 1 and self.anomaly_flag is False:  # two cables
+            #     print('number of cable count in splicing_connectors: {}, but the default cable count is 1.'.format(
+            #         cable_count))
+            #     self.anomaly_flag = True
 
             # {2-clamp: yellow  3-clamp: blue  5-clamp: red}    cable color and clamp number mismatch
             if self.few_shot_inited and self.foreground_pixel_hist != 0 and self.anomaly_flag is False:
@@ -779,7 +919,7 @@ class Model(nn.Module):
 
         return {"score": score, "instance_masks": instance_masks}
 
-    def process_k_shot(self, class_name, few_shot_samples, few_shot_paths):
+    def process_k_shot(self, class_name, few_shot_samples):
         few_shot_samples = F.interpolate(few_shot_samples, size=(448, 448), mode=self.inter_mode,
                                          align_corners=self.align_corners, antialias=self.antialias)
 
@@ -911,10 +1051,63 @@ class Model(nn.Module):
         return scores, mem_patch_feature_clip_coreset, mem_patch_feature_dinov2_coreset
 
 
-    def process(self, class_name: str, few_shot_samples: list[torch.Tensor], few_shot_paths: list[str]):
+    def process(self, class_name: str, few_shot_samples: list[torch.Tensor]):
         few_shot_samples = self.transform(few_shot_samples).to(self.device)
         scores, self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset = self.process_k_shot(
-            class_name, few_shot_samples, few_shot_paths)
+            class_name, few_shot_samples)
+
+    def process_subcategory(self, cat_id, normal_dino_patches, heatmap_cache, stage="test", k=1):
+        """处理单个子类别的优化版本"""
+
+        # 使用生成器避免中间变量累积
+        def get_features():
+            for j in range(k):
+                path = f"./outputs/{self.class_name}/{stage}/{j:03d}/mask_{cat_id}.png"
+                mask = heatmap_cache[path]
+
+                _, thresh = cv2.threshold(mask, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                thresh = torch.from_numpy(thresh).view(1, 1, *thresh.shape)
+                mask_stack = F.interpolate(thresh, size=self.perform_grid_size, mode="bilinear",
+                                           align_corners=True).reshape(self.perform_grid_size ** 2)
+                if mask_stack.sum() < 1:
+                    selected = None
+                else:
+                    selected = normal_dino_patches[j][mask_stack]
+                yield selected
+
+        # 流式处理特征
+        sub_features, sub_patch_features = [], []
+        for feat in get_features():
+            if feat is None: continue
+            sub_patch_features.append(feat)
+            sub_features.append(feat.mean(dim=0))
+        if len(sub_features) > 0:
+            # 延迟合并
+            sub_patch_features = torch.cat(sub_patch_features, dim=0)
+            sub_features = torch.stack(sub_features, dim=0)
+
+            # 原地归一化
+            F.normalize(sub_patch_features, p=2, dim=-1, out=sub_patch_features)
+            F.normalize(sub_features, p=2, dim=1, out=sub_features)
+
+        return sub_features, sub_patch_features
+
+
+    def generate_mask(self, sample):
+        masks, boxes, obj_names, pil_img = self.mask_generator.forward(sample, self.class_name)     # SAM mask
+        clusted_masks, label_ids = self.mask_generator.cluster_mask(masks, boxes, obj_names, self.class_name)
+        if self.class_name == "screw_bag":
+            clusted_masks[-1] = clusted_masks[-1] & (~clusted_masks[-2].astype(bool)).astype(int) * 255
+            binary = clusted_masks[-1]
+            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary)
+            for i in range(1, num_labels):
+                temp_mask = labels == i
+                if np.sum(temp_mask) <= 300: # 448x448 300
+                    binary[temp_mask] = 0 # set to background
+            clusted_masks[-1] = binary
+        return clusted_masks, boxes, label_ids, pil_img
+
+
 
     def setup(self, setup_data: dict[str, torch.Tensor]) -> None:
         """Setup the model.
@@ -926,13 +1119,99 @@ class Model(nn.Module):
         """
         few_shot_samples = setup_data.get("few_shot_samples")
         class_name = setup_data.get("dataset_category")
-        few_shot_paths = setup_data.get("few_shot_samples_path")
+        #few_shot_paths = setup_data.get("few_shot_samples_path")
         self.class_name = class_name
 
-        self.k_shot = few_shot_samples.size(0)
-        self.few_shot_inited = False
-        self.process(class_name, few_shot_samples, few_shot_paths)
-        self.few_shot_inited = True
+        if self.class_name == "screw_bag":
+            if not self.gdino_init:
+                self.mask_generator = GSAM2Predictor()
+                self.gdino_init = True
+            self.shot = len(few_shot_samples)  # k shots
+            transformed_normal_image = self.transform_dino(few_shot_samples).cuda()
+            heatmap_cache = dict()
+            if self.gdino_init:
+                self.mask_generator.objs_dict = self.objs_dict
+                self.mask_generator.foreground_num = self.foreground_num
+                all_area_hists = list()
+                all_color_hists = list()
+                for idx, sample in enumerate(few_shot_samples):
+                    clusted_masks, boxes, label_ids, pil_img = self.generate_mask(sample)
+                    area_hist = list()
+                    color_hist = list()
+                    # 转换为LAB色彩空间
+                    imglabo = cv2.cvtColor(np.array(pil_img), cv2.COLOR_BGR2LAB)
+                    color_a = imglabo[:, :, 1].astype(np.float32)  # 使用float32提高精度
+                    color_b = imglabo[:, :, 2].astype(np.float32)
+                    epsilon = 1e-7  # 更小的除数保护值
+                    color_ratio_sq = (color_b / (color_a + epsilon)) ** 2
+                    for cat_id, mask in enumerate(clusted_masks):
+                        heatmap_cache[f"./outputs/{self.class_name}/train/{idx:03d}/mask_{cat_id}.png"] = mask
+                        area = mask.sum()
+                        area_hist.append(area)
+                        masked_color = color_ratio_sq * mask
+                        color_value = np.sum(masked_color) / (area + epsilon)
+                        color_hist.append(color_value)
+                    all_area_hists.append(area_hist)
+                    all_color_hists.append(color_hist)
+
+                    if self.vis:
+                        path = f"./outputs/{self.class_name}/train/{idx:03d}/img.png"
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
+                        pil_img.save(path)
+                        for cat_id, mask in enumerate(clusted_masks):
+                            path = f"./outputs/{self.class_name}/train/{idx:03d}/mask_{cat_id}.png"
+
+                            cv2.imwrite(path, mask * 255)
+                # 归一化结果
+                self.class_hists_train = np.mean(np.vstack(all_area_hists), axis=0)
+                self.class_color_train = np.mean(np.vstack(all_color_hists), axis=0)
+
+            with torch.no_grad():
+                self.dinov2_normal_patch_tokens = self.model_dinov2_yy.forward_intermediates(transformed_normal_image, indices=self.out_layers, intermediates_only=True)
+                self.dinov2_normal_patch_tokens = [ F.interpolate(p, size=self.perform_grid_size, mode="bilinear", align_corners=True) for p in self.dinov2_normal_patch_tokens]
+                self.dinov2_normal_patch_tokens = [p.permute(0, 2, 3, 1).view(self.shot, self.perform_grid_size ** 2, self.embedding_dim) for p in self.dinov2_normal_patch_tokens]
+
+                self.eva02_normal_patch_tokens = self.model_eva02.forward_intermediates(transformed_normal_image, indices=self.out_layers, intermediates_only=True)
+                self.eva02_normal_patch_tokens = [F.interpolate(p, size=self.perform_grid_size, mode="bilinear", align_corners=True) for p in self.eva02_normal_patch_tokens]
+                self.eva02_normal_patch_tokens = [p.permute(0, 2, 3, 1).view(self.shot, self.perform_grid_size ** 2, self.embedding_dim) for p in self.eva02_normal_patch_tokens]
+
+            self.selected_features_eva02 = []
+            self.part_normal_patch_tokens_eva02 = []
+            for layer in range(4):
+                selected_features_eva02_layer = list()
+                part_normal_patch_tokens_eva02_layer = list()
+                for cat_id in range(self.foreground_num[self.class_name]):
+                    normal_patch_tokens_eva02 = self.eva02_normal_patch_tokens[layer]
+                    sub_feat, sub_patch = self.process_subcategory(
+                        cat_id, normal_patch_tokens_eva02, heatmap_cache, "train", self.shot
+                    )
+                    selected_features_eva02_layer.append(sub_feat)
+                    part_normal_patch_tokens_eva02_layer.append(sub_patch)
+                self.part_normal_patch_tokens_eva02.append(part_normal_patch_tokens_eva02_layer)  # [4, cats, ]
+                self.selected_features_eva02.append(selected_features_eva02_layer)
+
+            self.selected_features_dinov2 = []
+            self.part_normal_patch_tokens_dinov2 = []
+            for layer in range(4):
+                selected_features_dinov2_layer = list()
+                part_normal_patch_tokens_dinov2_layer = list()
+                for cat_id in range(self.foreground_num[self.class_name]):
+                    normal_patch_tokens_dinov2 = self.dinov2_normal_patch_tokens[layer]
+                    sub_feat, sub_patch = self.process_subcategory(
+                        cat_id, normal_patch_tokens_dinov2, heatmap_cache, "train", self.shot
+                    )
+                    selected_features_dinov2_layer.append(sub_feat)
+                    part_normal_patch_tokens_dinov2_layer.append(sub_patch)
+                self.part_normal_patch_tokens_dinov2.append(part_normal_patch_tokens_dinov2_layer)  # [4, cats, ]
+                self.selected_features_dinov2.append(selected_features_dinov2_layer)
+
+            del heatmap_cache
+
+        else:
+            self.k_shot = few_shot_samples.size(0)
+            self.few_shot_inited = False
+            self.process(class_name, few_shot_samples)
+            self.few_shot_inited = True
 
 
     def weights_url(self, category: str) -> str | None:
@@ -1085,7 +1364,112 @@ class Model(nn.Module):
 
         return results
 
-    def forward(self, image: torch.Tensor) -> dict[str, torch.Tensor]:
+    def compute_patch_similarity(self, query_feats, gallery_feats, feat_dim):
+        assert query_feats.shape[-1] == feat_dim, f"特征维度应为{feat_dim}"
+        assert gallery_feats.shape[-1] == feat_dim, f"特征维度应为{feat_dim}"
+
+        query = F.normalize(query_feats, dim=-1)
+        gallery = F.normalize(gallery_feats, dim=-1)
+        sim_matrix = (query @ gallery.T)
+
+        return sim_matrix.max(dim=1)[0]
+
+    def generate_heatmap(self, scores):
+        """生成异常热图
+        Args:
+            scores: 原始得分 [H,W]
+            original_size: 目标输出尺寸
+        Returns:
+            热图张量 [1,1,H,W]
+        """
+        # 调整到16x16基础尺寸
+        base_size = int(scores.numel() ** 0.5)
+        scores = scores.view(1, 1, base_size, base_size)
+
+        return scores
+
+    @torch.no_grad()
+    def compute_anomaly_maps(self, test_patch_tokens, normal_patch_tokens):
+        test_sim_all = []
+        for layer_idx, (query_layer, normal_layer) in enumerate(zip(
+                test_patch_tokens,
+                normal_patch_tokens
+        )):
+            # 当前层特征处理
+            query = query_layer.reshape(-1, self.embedding_dim)
+            gallery = normal_layer.reshape(-1, self.embedding_dim)
+
+            # 单层相似度计算
+            layer_sim = self.compute_patch_similarity(query, gallery, self.embedding_dim)
+            test_sim_all.append(layer_sim)
+
+            # 及时释放中间变量
+            del query, gallery, layer_sim
+
+        test_sim = torch.mean(torch.stack(test_sim_all), dim=0)
+        anomaly_map_test = 1 - self.generate_heatmap(test_sim)
+
+        return anomaly_map_test
+
+    def calculate_subcategory_metrics(
+            self,
+            test_patch_tokens,
+            heatmap_cache,
+            normal_feats,
+            normal_patch_tokens,
+            num_layers=4
+    ):
+        subcategory_mean_dists = []
+        subcategory_patch_sims = []
+        start_index = 0
+        if self.class_name == "screw_bag":
+            start_index = 1
+
+        for layer in range(num_layers):
+            subcategory_mean_dists_layer = []
+            subcategory_patch_sims_layer = []
+
+            for cat_id in range(start_index, self.foreground_num[self.class_name]):
+                subcategory_test_feat, subcategory_test_patch = self.process_subcategory(
+                    cat_id, test_patch_tokens[layer], heatmap_cache
+                )
+
+                if len(subcategory_test_feat) == 0:
+                    continue
+                if len(normal_feats[layer][cat_id]) == 0:
+                    continue
+                dist = 1 - (subcategory_test_feat @ normal_feats[layer][cat_id].T).max().item()
+                subcategory_mean_dists_layer.append(dist)
+
+                subcategory_test_patch_reshaped = subcategory_test_patch.reshape(-1, self.embedding_dim)
+                subcategory_normal_patch_reshaped = normal_patch_tokens[layer][cat_id].reshape(-1, self.embedding_dim)
+                cosine_similarity_matrix = (subcategory_test_patch_reshaped @ subcategory_normal_patch_reshaped.T)
+                sim_max, _ = torch.max(cosine_similarity_matrix, dim=1)
+                subcategory_patch_sims_layer.append(sim_max)
+
+            # 合并当前层的补丁相似度
+            if subcategory_patch_sims_layer:
+                subcategory_patch_sims_layer = torch.cat(subcategory_patch_sims_layer, dim=0)
+                subcategory_patch_sims.append(subcategory_patch_sims_layer)
+                subcategory_mean_dists.append(subcategory_mean_dists_layer)
+
+        # 计算跨层的平均补丁相似度
+        if subcategory_patch_sims:
+            subcategory_patch_sims = torch.mean(torch.stack(subcategory_patch_sims, dim=0), dim=0)
+            anomaly_map_ret_part = 1 - subcategory_patch_sims
+        else:
+            anomaly_map_ret_part = None
+
+        # 计算子类别平均距离
+        if subcategory_mean_dists:
+            subcategory_mean_dists = torch.tensor(subcategory_mean_dists).reshape(-1, len(subcategory_mean_dists[0]))
+            subcategory_mean_dists = torch.mean(subcategory_mean_dists, dim=0)
+        else:
+            subcategory_mean_dists = None
+
+        return anomaly_map_ret_part, subcategory_mean_dists
+
+    def forward(self, batch: torch.Tensor) -> dict[str, torch.Tensor]:
         """Forward pass of the model.
 
         Args:
@@ -1102,60 +1486,119 @@ class Model(nn.Module):
             pred_score=torch.zeros(batch_size, device=image.device),
         )
         '''
+        if self.class_name == "screw_bag":
+            self.scew_bag_abnormal_flag = 0
+            heatmap_cache = dict()
+            area_hist = list()
+            color_hist = list()
+            if self.gdino_init:
+                clusted_masks, boxes, label_ids, pil_img = self.generate_mask(batch[0])
+                # 转换为LAB色彩空间
+                imglabo = cv2.cvtColor(np.array(pil_img), cv2.COLOR_BGR2LAB)
+                color_a = imglabo[:, :, 1].astype(np.float32)  # 使用float32提高精度
+                color_b = imglabo[:, :, 2].astype(np.float32)
+                epsilon = 1e-7  # 更小的除数保护值
+                color_ratio_sq = (color_b / (color_a + epsilon)) ** 2
+                for cat_id, mask in enumerate(clusted_masks):
+                    heatmap_cache[f"./outputs/{self.class_name}/test/000/mask_{cat_id}.png"] = mask
+                    area = mask.sum()
+                    area_hist.append(area)
+                    masked_color = color_ratio_sq * mask
+                    color_value = np.sum(masked_color) / (area + epsilon)
+                    color_hist.append(color_value)
+                    if self.vis:
+                        path = f"./outputs/{self.class_name}/test/000/img.png"
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
+                        pil_img.save(path)
+                        for cat_id, mask in enumerate(clusted_masks):
+                            path = f"./outputs/{self.class_name}/test/000/mask_{cat_id}.png"
 
-        self.anomaly_flag = False
-        batch = image
-        batch = self.transform(batch).to(self.device)
-        results = self.forward_one_sample(batch, self.mem_patch_feature_clip_coreset,
-                                          self.mem_patch_feature_dinov2_coreset)
+                            cv2.imwrite(path, mask * 255)
+            area_hist_avg = np.array(area_hist) / self.class_hists_train
+            color_hist_avg = np.array(color_hist) / self.class_color_train
+            transformed_image = self.transform_dino(batch)
 
-        hist_score = results['hist_score']
-        structural_score = results['structural_score']
-        # standardization
-        standard_structural_score = (structural_score - self.stats[self.class_name]["structural_scores"]["mean"]) / \
-                                    self.stats[self.class_name]["structural_scores"]["unbiased_std"]
-        if self.class_name == 'pushpins':
-            pred_score = standard_structural_score
+            test_patch_tokens_dinov2 = self.model_dinov2_yy.forward_intermediates(transformed_image,indices=self.out_layers,intermediates_only=True)
+            test_patch_tokens_dinov2 = [F.interpolate(p, size=self.perform_grid_size, mode="bilinear", align_corners=True) for p in test_patch_tokens_dinov2]
+            test_patch_tokens_dinov2 = [p.permute(0, 2, 3, 1).view(-1, self.perform_grid_size ** 2, self.embedding_dim) for p in test_patch_tokens_dinov2]
+            anomaly_map_ret_dinov2 = self.compute_anomaly_maps(test_patch_tokens_dinov2, self.dinov2_normal_patch_tokens)
 
+            test_patch_tokens_eva02 = self.model_eva02.forward_intermediates(transformed_image, indices=self.out_layers, intermediates_only=True)
+            test_patch_tokens_eva02 = [ F.interpolate(p, size=self.perform_grid_size, mode="bilinear", align_corners=True) for p in test_patch_tokens_eva02]
+            test_patch_tokens_eva02 = [p.permute(0, 2, 3, 1).view(-1, self.perform_grid_size ** 2, self.embedding_dim) for p in test_patch_tokens_eva02]
+            anomaly_map_ret_eva02 = self.compute_anomaly_maps(test_patch_tokens_eva02, self.eva02_normal_patch_tokens)
+
+            dinov2_anomaly_map_ret_part, dinov2_subcategory_mean_dists = self.calculate_subcategory_metrics(
+                test_patch_tokens_dinov2, heatmap_cache, self.selected_features_dinov2,self.part_normal_patch_tokens_dinov2
+            )
+            eva02_anomaly_map_ret_part, eva02_subcategory_mean_dists = self.calculate_subcategory_metrics(
+                test_patch_tokens_eva02, heatmap_cache, self.selected_features_eva02, self.part_normal_patch_tokens_eva02
+            )
+            return ImageBatch(
+                image=batch,
+                pred_score=torch.tensor(
+                    20 * anomaly_map_ret_dinov2.max().item() +
+                    10 * anomaly_map_ret_eva02.max().item() +
+                    20 * dinov2_anomaly_map_ret_part.max().item() +
+                    25 * dinov2_subcategory_mean_dists.max().item() +
+                    5 * eva02_anomaly_map_ret_part.max().item() +
+                    25 * eva02_subcategory_mean_dists.max().item() +
+                    30 * abs(area_hist_avg[1] - 1) +
+                    30 * abs(area_hist_avg[2] - 1)
+                ).to(self.device)
+            )
         else:
-            instance_hungarian_match_score = results['instance_hungarian_match_score']
-            standard_instance_hungarian_match_score = (instance_hungarian_match_score -
-                                        self.stats[self.class_name]["instance_hungarian_match_scores"][
-                                        "mean"]) / \
-                                        self.stats[self.class_name]["instance_hungarian_match_scores"][
-                                        "unbiased_std"]
-
-            standard_hist_score = (hist_score - self.stats[self.class_name]["hist_scores"]["mean"]) / self.stats[self.class_name]["hist_scores"]["unbiased_std"]
-            if self.class_name == 'breakfast_box':
-                a1 = 16/(16+4+19)
-                a2 = 4/(16+4+19)
-                a3 = 19/(16+4+19)
-                pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
-           
-            elif self.class_name == 'juice_bottle':
-                a1 = 1/(1+7+0)
-                a2 = 7/(1+7+0)
-                a3 = 0
-                pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
-            elif self.class_name == 'screw_bag':
-                a1 = 1/(1+2+16)
-                a2 = 2/(1+2+16)
-                a3 = 16/(1+2+16)
-                pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
-            else:
-                pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
-            
-        def sigmoid(z):
-            return 1 / (1 + np.exp(-z))
-
-        pred_score = sigmoid(pred_score)
-        if self.anomaly_flag:
-            pred_score = 1.
             self.anomaly_flag = False
+            batch = self.transform(batch).to(self.device)
+            results = self.forward_one_sample(batch, self.mem_patch_feature_clip_coreset,
+                                              self.mem_patch_feature_dinov2_coreset)
 
-        batch_size = image.shape[0]
-        pred_score = torch.tensor(pred_score).to(self.device)
-        return ImageBatch(image=image, pred_score=pred_score,)
+            hist_score = results['hist_score']
+            structural_score = results['structural_score']
+            # standardization
+            standard_structural_score = (structural_score - self.stats[self.class_name]["structural_scores"]["mean"]) / \
+                                        self.stats[self.class_name]["structural_scores"]["unbiased_std"]
+            if self.class_name == 'pushpins':
+                pred_score = standard_structural_score
+
+            else:
+                instance_hungarian_match_score = results['instance_hungarian_match_score']
+                standard_instance_hungarian_match_score = (instance_hungarian_match_score -
+                                            self.stats[self.class_name]["instance_hungarian_match_scores"][
+                                            "mean"]) / \
+                                            self.stats[self.class_name]["instance_hungarian_match_scores"][
+                                            "unbiased_std"]
+
+                standard_hist_score = (hist_score - self.stats[self.class_name]["hist_scores"]["mean"]) / self.stats[self.class_name]["hist_scores"]["unbiased_std"]
+                if self.class_name == 'breakfast_box':
+                    a1 = 16/(16+4+19)
+                    a2 = 4/(16+4+19)
+                    a3 = 19/(16+4+19)
+                    pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
+
+                elif self.class_name == 'juice_bottle':
+                    a1 = 1/(1+7+0)
+                    a2 = 7/(1+7+0)
+                    a3 = 0
+                    pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
+                elif self.class_name == 'screw_bag':
+                    a1 = 1/(1+2+16)
+                    a2 = 2/(1+2+16)
+                    a3 = 16/(1+2+16)
+                    pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
+                else:
+                    pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+
+            def sigmoid(z):
+                return 1 / (1 + np.exp(-z))
+            pred_score = sigmoid(pred_score)
+            if self.anomaly_flag:
+                pred_score = 1.
+                self.anomaly_flag = False
+
+            batch_size = batch.shape[0]
+            pred_score = torch.tensor(pred_score).to(self.device)
+            return ImageBatch(image=batch, pred_score=pred_score,)
 
 
 
