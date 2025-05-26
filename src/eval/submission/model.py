@@ -124,13 +124,20 @@ class Model(nn.Module):
             ],
         )
        
-        # self.model_clip, _, _ = open_clip.create_model_and_transforms(
-        #     model_name="ViT-L-14",
-        #     pretrained="/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
-        # )
-        # self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
-        self.model_clip, _, _ = open_clip.create_model_and_transforms('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
-        self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
+        local_model_path = "/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
+        remote_model_id = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
+        model_name = "ViT-L-14"
+        if os.path.exists(local_model_path):
+            print("Loading CLIP model from local checkpoint...")
+            self.model_clip, _, _ = open_clip.create_model_and_transforms(
+                model_name=model_name,
+                pretrained=local_model_path
+            )
+            self.tokenizer = open_clip.get_tokenizer(model_name)
+        else:
+            print("Local model not found. Loading CLIP model from HuggingFace Hub...")
+            self.model_clip, _, _ = open_clip.create_model_and_transforms(remote_model_id)
+            self.tokenizer = open_clip.get_tokenizer(remote_model_id)
 
 
         self.feature_list = [6, 12, 18, 24]
@@ -681,10 +688,11 @@ class Model(nn.Module):
 
         raw_image = to_np_img(image[0])
         height, width = raw_image.shape[:2]
-        if self.class_name == 'splicing_connectors':
-            masks = self.mask_generator.generate(raw_image)
-        else:
-            masks = self.segmenter.generate_masks_formatted(raw_image, self.class_name)
+        # if self.class_name == 'splicing_connectors':
+        #     masks = self.mask_generator.generate(raw_image)
+        # else:
+        #     masks = self.segmenter.generate_masks_formatted(raw_image, self.class_name)
+        masks = self.segmenter.generate_masks_formatted(raw_image, self.class_name)
         # self.predictor.set_image(raw_image)
 
         no_pushpins_detected = False
@@ -869,16 +877,22 @@ class Model(nn.Module):
             # # --- 策略1：降低SAM输入分辨率 ---
             # largest_mask_high_res_bool = (sam_mask == 1)
             # sam_mask_max_area = largest_mask_high_res_bool # background
-            sam_mask_max_area = sorted_masks[0]['segmentation'] # background
-            binary = (sam_mask_max_area == 0).astype(np.uint8) # sam_mask_max_area is background,  background 0 foreground 1
+            # sam_mask_max_area = sorted_masks[0]['segmentation'] # background
+            # binary = (sam_mask_max_area == 0).astype(np.uint8) # sam_mask_max_area is background,  background 0 foreground 1
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
             count = 0
             for i in range(1, num_labels):
                 temp_mask = labels == i
-                if np.sum(temp_mask) <= 64: # 448x448 64
+                if np.sum(temp_mask) <= 200: # 448x448 64
                     binary[temp_mask] = 0 # set to background
                 else:
                     count += 1
+
+            kernel = np.ones((3, 3), dtype=np.uint8)  # dilate for robustness  
+            dilate_binary = cv2.dilate(binary, kernel)
+            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilate_binary, connectivity=8)
+            count = num_labels - 1 # number of splicing connectors, -1 for background
+
             if count != 1 and self.anomaly_flag is False: # cable cut or no cable or no connector
                 print('number of connected component in splicing_connectors: {}, but the default connected component is 1.'.format(count))
                 self.anomaly_flag = True
@@ -1247,7 +1261,8 @@ class Model(nn.Module):
             scores.append(results["score"])
 
         # 进行fewshot_setup
-        inspector.setup(few_shot_data)
+        if self.class_name == 'pushpins':
+            inspector.setup(few_shot_data)
 
         if len(foreground_pixel_hist) != 0:
             self.foreground_pixel_hist = np.mean(foreground_pixel_hist)
