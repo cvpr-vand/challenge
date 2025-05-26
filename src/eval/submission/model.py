@@ -51,7 +51,7 @@ class Model(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-        print("CUDA!!!!!")
+        #print("CUDA!!!!!")
         import subprocess
         # 使用subprocess.check_output来运行nvcc命令，并获取输出
         output = subprocess.check_output(['nvcc', '--version']).decode('utf-8')
