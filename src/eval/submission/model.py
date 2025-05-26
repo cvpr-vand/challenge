@@ -398,8 +398,8 @@ class Model(nn.Module):
 
             if self.anomaly_flag:
                 pred_score = 1.0
-                if reasons:
-                    print(f"检测到异常！原因: {', '.join(reasons)}")
+                # if reasons:
+                #     print(f"检测到异常！原因: {', '.join(reasons)}")
                 self.anomaly_flag = False
 
             pred_scores.append(pred_score)
