@@ -23,7 +23,7 @@ from torchvision.transforms.v2.functional import resize, crop, rotate, Interpola
 from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
     
-from .models.component_segmentaion import (
+from .models.not_component_segmentaion import (
     split_masks_from_one_mask,
     split_masks_from_one_mask_sort,
     filter_by_combine,
@@ -33,9 +33,6 @@ from .models.component_segmentaion import (
     filter_masks_below_area,
     post_process_masks,
     compute_logical_score,
-    merge_small_regions_to_smallest_neighbor,
-    smooth_masks,
-    process_masks_juice_bottle,
     save_tensor_as_jpg,
     filter_masks_by_area
 )
