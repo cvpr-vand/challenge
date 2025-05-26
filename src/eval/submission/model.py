@@ -32,10 +32,15 @@ from .models.component_segmentaion import (
     merge_masks,
     filter_masks_below_area,
     post_process_masks,
-    compute_logical_score
+    compute_logical_score,
+    merge_small_regions_to_smallest_neighbor,
+    smooth_masks,
+    process_masks_juice_bottle,
+    save_tensor_as_jpg,
+    filter_masks_by_area
 )
 
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 
 from .models.segment_anything import (
@@ -66,42 +71,13 @@ i_m = i_m[:, None, None]
 i_std = np.array(IMAGENET_STD)
 i_std = i_std[:, None, None]
 
-def save_tensor_as_jpg(tensor_images, save_dir="saved_images", class_name=None):
-    # 创建保存目录
-    os.makedirs(save_dir, exist_ok=True)
-    
-    # 遍历每张图像并保存
-    for i in range(tensor_images.shape[0]):
-        # 方法1：使用 torchvision 的 save_image
-        data = tensor_images[i]
-        data = data.cpu().numpy()
-        data = np.clip(data * 255, 0, 255).astype(np.uint8)
-        data = data.transpose(1, 2, 0)
-        data = cv2.cvtColor(data, cv2.COLOR_BGR2RGB)
-
-        if class_name == "pushpins":
-            black_image = np.zeros_like(data)
-
-            x1, y1, x2, y2 = 10, 15, 246, 246
-            if data.shape[0] > 400:
-                x1, y1, x2, y2 = 20, 30, 428, 428
-
-            # 确保坐标不超出图像边界
-            x2 = min(x2, data.shape[1])
-            y2 = min(y2, data.shape[0])
-
-            # 复制指定区域
-            black_image[y1:y2, x1:x2] = data[y1:y2, x1:x2]
-            data = black_image
-
-        cv2.imwrite(f"{save_dir}/image_{i}.jpg", data)
-
 def load_image(image_path):
     # load image
     image_pil = Image.open(image_path).convert("RGB")  # load image
     return image_pil, None
 
-def infer_dino(img, queries, box_threshold, text_threshold, area_threshold, dino_model, dino_processor, device):
+
+def infer_dino(img, queries, box_threshold, text_threshold, area_threshold, dino_model, dino_processor, device, class_name=None):
     
     width, height = img.size[:2]
     img_area = width * height
@@ -135,10 +111,16 @@ def infer_dino(img, queries, box_threshold, text_threshold, area_threshold, dino
             box_area = box_width * box_height
             
             # 如果框的面积小于整张图像的80%，保留
-            if box_area / img_area < area_threshold:
-                filtered_boxes.append(box)
-                filtered_labels.append(result["labels"][i])
-                filtered_scores.append(result["scores"][i])
+            if class_name == "juice_bottle":
+                if box_area / img_area < 0.1 or box_area / img_area > 0.4:
+                    filtered_boxes.append(box)
+                    filtered_labels.append(result["labels"][i])
+                    filtered_scores.append(result["scores"][i])
+            else:
+                if box_area / img_area < area_threshold:
+                    filtered_boxes.append(box)
+                    filtered_labels.append(result["labels"][i])
+                    filtered_scores.append(result["scores"][i])
         
         filtered_result = {
             "boxes": torch.stack(filtered_boxes) if filtered_boxes else torch.zeros((0, 4)),
@@ -204,6 +186,12 @@ class Model(nn.Module):
         sam = sam_hq_model_registry["vit_h"]("src/eval/submission/ckpts/sam_hq_vit_h.pth").to(device)
         self.sam_predictor = SamPredictor(sam)
 
+        grounding_model_id = "IDEA-Research/grounding-dino-base"
+
+        self.grounding_processor = AutoProcessor.from_pretrained(grounding_model_id)
+        self.grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(grounding_model_id).to(self.device)
+
+
 
     def grounding_segmentation(self, image_path, mask_path, grounding_config):
         os.makedirs(f"{mask_path}",exist_ok=True)
@@ -219,6 +207,7 @@ class Model(nn.Module):
             self.grounding_model,
             self.grounding_processor,
             self.device,
+            self.class_name
         )
 
         boxes_filt, pred_phrases, scores = grounding_output[0]["boxes"], grounding_output[0]["labels"], grounding_output[0]["scores"]
@@ -240,30 +229,24 @@ class Model(nn.Module):
 
         if boxes_filt.size(0) == 0:
 
-            if self.class_name == "pushpins":
+            if self.class_name == "pushpins" or self.class_name == "screw_bag":
                 refined_masks = np.zeros((448,448), dtype=np.uint8)
             else:
                 refined_masks = np.zeros((256,256), dtype=np.uint8)
 
             cv2.imwrite(f"{mask_path}/refined_masks.png",refined_masks)
-
             with open(f"{mask_path}/pred_phrases.json", 'w', encoding='utf-8') as f:
                 json.dump(pred_phrases, f, ensure_ascii=False, indent=4)
 
         else:
-
-
             boxes_filt = boxes_filt.cpu()
-
             transformed_boxes = self.sam_predictor.transform.apply_boxes_torch(boxes_filt, image.shape[:2]).to(self.device)
-
             masks, _, _ = self.sam_predictor.predict_torch(
                 point_coords = None,
                 point_labels = None,
                 boxes = transformed_boxes.to(self.device),
                 multimask_output = False,
             )
-
 
             if len(background_box) != 0:
                 backgrounds = torch.stack([masks[i] for i in background_box])
@@ -274,18 +257,20 @@ class Model(nn.Module):
 
             masks = torch.stack([masks[i] for i in range(len(masks)) if i not in background_box])
             masks = turn_binary_to_int(masks[:,0,:,:].cpu().numpy())
-
             masks = split_masks_by_connected_component(masks)
 
             if len(masks) == 0:
-                if self.class_name == "pushpins":
+                if self.class_name == "pushpins" or self.class_name == "screw_bag":
                     masks = np.zeros((448,448), dtype=np.uint8)
                 else:
                     masks = np.zeros((256,256), dtype=np.uint8)
             else:
-                masks = filter_by_combine(masks)
+                if self.class_name != "juice_bottle":
+                    masks = filter_by_combine(masks)
                 if self.class_name == "screw_bag":
-                    masks = filter_masks_below_area(masks, 200)
+                    masks = filter_masks_below_area(masks, 100)
+                    masks = filter_masks_by_area(masks, 2000*3)
+                    
                 masks = merge_masks(masks, reverse=True)
 
             cv2.imwrite(f"{mask_path}/grounding_mask.png",masks)
@@ -293,15 +278,8 @@ class Model(nn.Module):
 
             refined_masks = cv2.imread(f"{mask_path}/grounding_mask.png",cv2.IMREAD_GRAYSCALE)
             refined_masks, _ = split_masks_from_one_mask(refined_masks)
-            refined_masks = post_process_masks(refined_masks, self.class_name)
 
-            if len(refined_masks) == 0:
-                if self.class_name == "pushpins":
-                    refined_masks = np.zeros((448,448), dtype=np.uint8)
-                else:
-                    refined_masks = np.zeros((256,256), dtype=np.uint8)
-            else:
-                refined_masks = merge_masks(refined_masks)
+            refined_masks = post_process_masks(refined_masks, self.class_name)
 
             cv2.imwrite(f"{mask_path}/refined_masks.png",refined_masks)
             with open(f"{mask_path}/pred_phrases.json", 'w', encoding='utf-8') as f:
@@ -314,17 +292,9 @@ class Model(nn.Module):
         few_shot_samples = setup_data.get("few_shot_samples")
         self.class_name = setup_data.get("dataset_category")
         self.shot = len(few_shot_samples)
-
-        if self.class_name in ["breakfast_box", "juice_bottle"]:
-            grounding_model_id = "IDEA-Research/grounding-dino-tiny"
-        else:
-            grounding_model_id = "IDEA-Research/grounding-dino-base"
-
-        self.grounding_processor = AutoProcessor.from_pretrained(grounding_model_id)
-        self.grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(grounding_model_id).to(self.device)
         
 
-        self.sampler = GreedyCoresetSampler(percentage= 0.2 / self.shot, device=self.device)
+        self.sampler = GreedyCoresetSampler(percentage= 0.3 / self.shot, device=self.device)
         
         if self.class_name == "screw_bag":
             few_shot_samples = rotate(few_shot_samples, 3, interpolation=InterpolationMode.BILINEAR)
@@ -339,9 +309,9 @@ class Model(nn.Module):
             self.grounding_config['area_threshold'] = 1
             
         elif self.class_name == "screw_bag":
-            self.grounding_config['text_prompt'] = "bolt . attach . key . nut . screw . washer . tool . stick . wrench . silver"
-            self.grounding_config['box_threshold'] = 0.21
-            self.grounding_config['text_threshold'] = 0.21
+            self.grounding_config['text_prompt'] = "bolt . attach . key . nut . screw . washer . tool . stick . wrench . silver . metal . item . object . circle . ring . hexagon"
+            self.grounding_config['box_threshold'] = 0.17
+            self.grounding_config['text_threshold'] = 0.17
             self.grounding_config['area_threshold'] = 0.2
         elif self.class_name == "splicing_connectors":
             self.grounding_config['text_prompt'] = "attach. cable. connector. hook. electric outlet. plug. pole. socket. wire"
@@ -354,9 +324,9 @@ class Model(nn.Module):
             self.grounding_config['text_threshold'] = 0.15
             self.grounding_config['area_threshold'] = 0.1
         elif self.class_name == "juice_bottle":
-            self.grounding_config['text_prompt'] = "bottle . label . banana . cherry . orange"
-            self.grounding_config['box_threshold'] = 0.25
-            self.grounding_config['text_threshold'] = 0.25
+            self.grounding_config['text_prompt'] = "bottle . label . banana . cherry . orange . tangerine"
+            self.grounding_config['box_threshold'] = 0.2
+            self.grounding_config['text_threshold'] = 0.3
             self.grounding_config['area_threshold'] = 1
 
         clip_transformed_normal_image = self.transform_clip(few_shot_samples).to(
@@ -389,7 +359,7 @@ class Model(nn.Module):
 
         self.part_num = {}
         self.part_num['breakfast_box'] = 6
-        self.part_num['juice_bottle'] = 3
+        self.part_num['juice_bottle'] = 4
         self.part_num['screw_bag'] = 6
         self.part_num['splicing_connectors'] = 3
         self.part_num['pushpins'] = 15
@@ -491,13 +461,30 @@ class Model(nn.Module):
                     image_to_save = F.interpolate(
                         single_image, size=(448, 448), mode="bilinear", align_corners=True
                     )
+
+                    save_tensor_as_jpg(image_to_save, save_dir=f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}", class_name=self.class_name)
+                    self.grounding_segmentation(
+                        f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}/sharpened_0.jpg", f"src/eval/submission/test_masks/{self.class_name}/{str(self.image_idx)}", self.grounding_config
+                    )
+
+                elif self.class_name == "screw_bag":
+                    image_to_save = F.interpolate(
+                        single_image, size=(448, 448), mode="bilinear", align_corners=True
+                    )
+                    # image_to_save = single_image
+
+                    save_tensor_as_jpg(image_to_save, save_dir=f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}", class_name=self.class_name)
+                    self.grounding_segmentation(
+                        f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}/sharpened_0.jpg", f"src/eval/submission/test_masks/{self.class_name}/{str(self.image_idx)}", self.grounding_config
+                    )
+
                 else:
                     image_to_save = single_image
                     
-                save_tensor_as_jpg(image_to_save, save_dir=f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}", class_name=self.class_name)
-                self.grounding_segmentation(
-                    image_save_path, f"src/eval/submission/test_masks/{self.class_name}/{str(self.image_idx)}", self.grounding_config
-                )
+                    save_tensor_as_jpg(image_to_save, save_dir=f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}", class_name=self.class_name)
+                    self.grounding_segmentation(
+                        image_save_path, f"src/eval/submission/test_masks/{self.class_name}/{str(self.image_idx)}", self.grounding_config
+                    )
 
 
             logical_score = 0
@@ -509,7 +496,8 @@ class Model(nn.Module):
                 logical_score += 1
 
             else:
-                logical_score += compute_logical_score(masks, self.class_name, self.image_idx)
+                if self.class_name != "breakfast_box":
+                    logical_score += compute_logical_score(masks, self.class_name, self.image_idx)
             
             final_score = 1 * logical_score + 1 * structure_score
             batch_pred_scores.append(final_score)
