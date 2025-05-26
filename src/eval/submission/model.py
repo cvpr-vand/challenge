@@ -37,8 +37,6 @@ from eval.submission.gdino_sam2.interface import GSAM2Predictor
 import os
 
 
-
-
 def to_np_img(m):
     m = m.permute(1, 2, 0).cpu().numpy()
     mean = np.array([[[0.48145466, 0.4578275, 0.40821073]]])
