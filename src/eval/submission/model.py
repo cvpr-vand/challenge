@@ -291,7 +291,7 @@ class Model(nn.Module):
         self.shot = len(few_shot_samples)
         
 
-        self.sampler = GreedyCoresetSampler(percentage= 0.25 / self.shot, device=self.device)
+        self.sampler = GreedyCoresetSampler(percentage= 0.3 / self.shot, device=self.device)
         
         if self.class_name == "screw_bag":
             few_shot_samples = rotate(few_shot_samples, 3, interpolation=InterpolationMode.BILINEAR)
