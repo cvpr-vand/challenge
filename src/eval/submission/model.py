@@ -23,7 +23,7 @@ from torchvision.transforms.v2.functional import resize, crop, rotate, Interpola
 from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
     
-from .models.component_segmentaion import (
+from .models.component_segmentaion_code import (
     split_masks_from_one_mask,
     split_masks_from_one_mask_sort,
     filter_by_combine,
@@ -272,7 +272,6 @@ class Model(nn.Module):
 
             cv2.imwrite(f"{mask_path}/grounding_mask.png",masks)
 
-
             refined_masks = cv2.imread(f"{mask_path}/grounding_mask.png",cv2.IMREAD_GRAYSCALE)
             refined_masks, _ = split_masks_from_one_mask(refined_masks)
 
@@ -433,7 +432,6 @@ class Model(nn.Module):
                 sim = torch.mean(torch.stack(sims, dim=0), dim=0)
                 anomaly_map_ret = 1 - sim
 
-            
                 if self.class_name in ["pushpins", "screw_bag"]:
                     anomaly_map_structure = anomaly_map_ret
                 else:
@@ -445,7 +443,6 @@ class Model(nn.Module):
                     sim_max_dino, _ = torch.max(cosine_similarity_matrix, dim=1)
 
                     anomaly_map_ret_dino = 1 - sim_max_dino
-
                     anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino
 
                 structure_score = anomaly_map_structure.max().item()
@@ -493,8 +490,7 @@ class Model(nn.Module):
                 logical_score += 1
 
             else:
-                if self.class_name != "breakfast_box":
-                    logical_score += compute_logical_score(masks, self.class_name, self.image_idx)
+                logical_score += compute_logical_score(masks, self.class_name, self.image_idx)
             
             final_score = 1 * logical_score + 1 * structure_score
             batch_pred_scores.append(final_score)
