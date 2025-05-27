@@ -277,6 +277,11 @@ class Model(nn.Module):
             raise FileNotFoundError(f"Required model statistics file is missing: {pkl_path_threshold}")
         with open(pkl_path_threshold, "rb") as f:
             self.threshold_stats = pickle.load(f)
+        pkl_path_threshold2 = os.path.join(current_dir, "memory_bank", "statistic_thresholds2.pkl")
+        if not os.path.exists(pkl_path_threshold2):
+            raise FileNotFoundError(f"Required model statistics file is missing: {pkl_path_threshold2}")
+        with open(pkl_path_threshold2, "rb") as f:
+            self.threshold_stats2 = pickle.load(f)
             
         self.mem_instance_masks = None
 
@@ -387,7 +392,10 @@ class Model(nn.Module):
                 # 结合阈值进行判断
                 reasons = [] # 用于记录异常原因，便于调试
                 for score_name, score_value in list_of_scores.items():
-                    threshold_info = self.threshold_stats[score_name]
+                    if score_name == 'head_area_score':
+                        threshold_info = self.threshold_stats2[score_name]
+                    else:
+                        threshold_info = self.threshold_stats[score_name]
                     threshold = threshold_info['threshold']
                     # 对污染使用您在inspector中定义的固定像素阈值
                     if score_name == 'contamination_score':
@@ -396,6 +404,10 @@ class Model(nn.Module):
                             reasons.append(f"{score_name} | 计数值:{score_value} > 阈值:{inspector.CONTAMINATION_PIXEL_THRESHOLD}")
                     # 其他分数都是值越大越异常
                     elif score_name == 'head_shape_score':
+                        if score_value > threshold:
+                            self.anomaly_flag = True
+                            reasons.append(f"{score_name} | 值:{score_value:.4f} > 阈值:{threshold:.4f}")
+                    elif score_name == 'head_area_score':
                         if score_value > threshold:
                             self.anomaly_flag = True
                             reasons.append(f"{score_name} | 值:{score_value:.4f} > 阈值:{threshold:.4f}")
@@ -807,7 +819,38 @@ class Model(nn.Module):
             binary_noclip = np.isin(merge_sam_noclip, self.foreground_label_idx[self.class_name]).astype(np.uint8) # foreground 1  background 0
             dilate_binary_noclip = cv2.dilate(binary_noclip, kernel)
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilate_binary, connectivity=8)
-            pushpins_count = num_labels - 1 # number of pushpins
+            pushpins_count = 0
+            valid_centroids = []
+            for i in range(1, num_labels):
+                if stats[i, cv2.CC_STAT_AREA] < 100: continue
+                x, y, w, h, _ = stats[i]
+                instance_mask = (labels[y:y+h, x:x+w] == i).astype(np.uint8) * 255
+                instance_image = raw_image[y:y+h, x:x+w]
+                # image = Image.fromarray(instance_image, mode='RGB')
+                # image.save("special_variable_image.png")
+                # debug_dir = "debug_images"
+                # os.makedirs(debug_dir, exist_ok=True)
+                # pushpin_masks_name = os.path.join(debug_dir, "pushpin_masks.png")
+                # cv2.imwrite(pushpin_masks_name, instance_mask)
+                instance_image = cv2.cvtColor(instance_image, cv2.COLOR_RGB2BGR)
+                hsv_instance_only = cv2.bitwise_and(instance_image, instance_image, mask=instance_mask)
+                hsv_instance = cv2.cvtColor(hsv_instance_only, cv2.COLOR_BGR2HSV)
+                HEAD_YELLOW_LOWER = np.array([15, 180, 46])
+                HEAD_YELLOW_UPPER = np.array([35, 255, 255])
+                yellow_mask = cv2.inRange(hsv_instance, HEAD_YELLOW_LOWER, HEAD_YELLOW_UPPER)
+                # debug_dir = "debug_images"
+                # os.makedirs(debug_dir, exist_ok=True)
+                # head_masks_name = os.path.join(debug_dir, "head_masks.png")
+                # cv2.imwrite(head_masks_name, yellow_mask)
+                # yellow_mask 中非零且 instance_mask 中非零的才是有效区域
+                valid_pixels = np.logical_and(yellow_mask > 0, instance_mask > 0)
+                # 5. 计算比例
+                yellow_ratio = np.sum(valid_pixels) / np.sum(instance_mask > 0)
+                # 6. 判断是否大多数为黄色（如大于 80%）
+                if yellow_ratio > 0.5:
+                    pushpins_count += 1
+                    valid_centroids.append(centroids[i])
+            # pushpins_count = num_labels - 1 # number of pushpins
             if no_pushpins_detected:
                 pushpins_count = 0
 
@@ -824,7 +867,7 @@ class Model(nn.Module):
             # ✅ 新增逻辑：图钉数量匹配但要检查每个格子最多一个图钉
             if pushpins_count == self.pushpins_count and self.anomaly_flag is False:
                 # 图钉中心点列表
-                pushpin_centers = centroids[1:]  # 去掉背景，第0个是背景
+                pushpin_centers = valid_centroids[0:]  # 去掉背景，第0个是背景
                 # 15个格子 bbox 坐标
                 grid_boxes = [
                     (186, 42, 77, 121),(0, 37, 95, 125),(0, 169, 95, 120),(0, 300, 95, 124),(185, 169, 77, 119),(354, 300, 93, 121),(353, 170, 74, 119),
@@ -880,18 +923,36 @@ class Model(nn.Module):
             # sam_mask_max_area = sorted_masks[0]['segmentation'] # background
             # binary = (sam_mask_max_area == 0).astype(np.uint8) # sam_mask_max_area is background,  background 0 foreground 1
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
-            count = 0
             for i in range(1, num_labels):
                 temp_mask = labels == i
                 if np.sum(temp_mask) <= 200: # 448x448 64
                     binary[temp_mask] = 0 # set to background
-                else:
-                    count += 1
 
             kernel = np.ones((3, 3), dtype=np.uint8)  # dilate for robustness  
             dilate_binary = cv2.dilate(binary, kernel)
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilate_binary, connectivity=8)
-            count = num_labels - 1 # number of splicing connectors, -1 for background
+            count = 0
+            for i in range(1, num_labels):
+                temp_mask = labels == i
+                # 获取该实例的掩码区域对应的图像块（假设有 raw_image）
+                x, y, w, h, _ = stats[i]
+                instance_mask_crop = temp_mask[y:y+h, x:x+w].astype(np.uint8) * 255
+                instance_image_crop = raw_image[y:y+h, x:x+w]  
+                instance_image_crop = cv2.cvtColor(instance_image_crop, cv2.COLOR_RGB2BGR)# BGR 图像
+                hsv_instance_only = cv2.bitwise_and(instance_image_crop, instance_image_crop, mask=instance_mask_crop)
+                hsv_instance = cv2.cvtColor(hsv_instance_only, cv2.COLOR_BGR2HSV)
+                h_channel, s_channel, v_channel = cv2.split(hsv_instance)
+                mask_indices = instance_mask_crop > 0
+                s_values = s_channel[mask_indices]
+                v_values = v_channel[mask_indices]
+                s_thresh_ratio = np.sum(s_values <= 80) / len(s_values)
+                v_thresh_ratio = np.sum(v_values <= 80) / len(v_values)
+                # 如果大多数（85%）像素都是低饱和低亮度，认为是灰暗区域，过滤掉
+                if s_thresh_ratio > 0.5 and v_thresh_ratio > 0.5:
+                    binary[temp_mask] = 0
+                    continue
+                count += 1  # 保留的实例数量
+            # count = num_labels - 1 # number of splicing connectors, -1 for background
 
             if count != 1 and self.anomaly_flag is False: # cable cut or no cable or no connector
                 print('number of connected component in splicing_connectors: {}, but the default connected component is 1.'.format(count))
