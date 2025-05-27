@@ -1259,7 +1259,7 @@ class Model(nn.Module):
         #few_shot_paths = setup_data.get("few_shot_samples_path")
         self.class_name = class_name
 
-        if self.class_name == "screw_bag" or self.class_name == "breakfast_box":
+        if self.class_name == "screw_bag" or self.class_name == "breakfast_box" or self.class_name == "juice_bottle":
             if not self.gdino_init:
                 self.mask_generator = GSAM2Predictor()
                 self.gdino_init = True
@@ -1980,7 +1980,7 @@ class Model(nn.Module):
                         10 * eva02_anomaly_map_ret_part.max().item() +
                         10 * eva02_subcategory_mean_dists.max().item() +
                         5 * self.bottle_abnormal_flag
-                        )
+                        ).to(self.device)
                     )
             else:
                 return ImageBatch(
