@@ -455,7 +455,8 @@ class Model(nn.Module):
         if result:
             masks = result
         else:
-            if self.class_name == 'juice_bottle':
+            # if self.class_name == 'juice_bottle':
+            if self.class_name in ['juice_bottle', 'splicing_connectors']:
                 masks = self.mask_generator_sam2.generate(raw_image)
             else:
                 masks = self.mask_generator_sam.generate(raw_image)
@@ -584,7 +585,7 @@ class Model(nn.Module):
                         return 0
                 else:
                     return 0
-                
+            '''    
             def cal_component_num(binary): # 计算组件数量
                 kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)) # 15, 15
                 binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
@@ -612,7 +613,128 @@ class Model(nn.Module):
                     if stats[i, cv2.CC_STAT_AREA] >= min_area:
                         final_line[labels == i] = 255
                 num_labels_line, labels_line, stats_line, _ = cv2.connectedComponentsWithStats(final_line, connectivity=8)
-                return component_count, num_labels_rects-1, num_labels_line-1 # mask中连通域数量、两端连接器数量、线缆数量（良品对应三项数量：1，2，1）('-1'因为第0个连通域为背景)
+                return component_count, num_labels_rects-1, num_labels_line-1 # mask中连通域数量、两端连接器数量、线缆数量（良品对应三项数量：1，2，1）('-1'因为第0个连通域为背景)self.class_name == 'sp
+            '''
+            def count_red_pixels_rgb(img_bgr):
+                b, g, r = cv2.split(img_bgr)
+                
+                # 生成红色像素的布尔掩膜 (r > g 且 r > b)
+                red_mask = (r > g+125) & (r > b+125)
+                
+                # 统计红色像素数量
+                red_pixels = np.sum(red_mask)
+                return red_pixels
+
+            def apply_binary_mask(binary, rgb_img):
+                if len(binary.shape) > 2:
+                    binary = cv2.cvtColor(binary, cv2.COLOR_BGR2GRAY)
+                
+                mask = cv2.merge([binary, binary, binary])
+                
+                rgb_img2 = cv2.bitwise_and(rgb_img, mask)
+                
+                return rgb_img2
+            def count_line_component(rgb_line_img, red_mask):
+                red_only = rgb_line_img.copy()
+                red_only[~red_mask] = 0  # ~表示逻辑非
+                red_only = cv2.cvtColor(red_only, cv2.COLOR_BGR2GRAY)
+                _, red_only = cv2.threshold(red_only, 50, 255, cv2.THRESH_BINARY)
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)) # 15, 15
+                red_only = cv2.morphologyEx(red_only, cv2.MORPH_CLOSE, kernel_open)
+                # red_only = cv2.morphologyEx(red_only, cv2.MORPH_OPEN, kernel_open)
+                        
+                # 连通域分析
+                num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(red_only, connectivity=8)
+                # 创建空白掩膜用于保留有效区域
+                filtered_mask = np.zeros_like(red_only)
+
+                # 遍历连通域（跳过背景标签0）
+                for i in range(1, num_labels):
+                    area = stats[i, cv2.CC_STAT_AREA]  # 获取当前连通域面积
+                    if area >= 40:  # 保留面积≥40的连通域
+                        filtered_mask[labels == i] = 255  # 将该连通域设为白色
+                num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(filtered_mask, connectivity=8)
+                return num_labels
+            
+                
+            def cal_component_num(binary, raw_image): # 计算组件数量
+                binary = np.where(binary > 0, 255, 0).astype(np.uint8)
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)) # 15, 15
+                binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
+                num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8) # 
+
+                component_count = 0 # 良品为1
+                for i in range(1, num_labels): # 第0个连通域为背景
+                    temp_mask = labels == i # 每个连通域mask
+                    if np.sum(temp_mask) <= 64:  # 448x448 64
+                        binary[temp_mask] = 0  # set to background（将小面积连通域置为背景）
+                    else:
+                        component_count += 1
+
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 20)) # 15, 15
+                rect_mask = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open) # 连接器
+                # 使用连通域分析统计矩形连接器个数(连通域数量含背景)
+                num_labels_rects, labels_rects, stats_rects, _ = cv2.connectedComponentsWithStats(rect_mask, connectivity=8) # 仅保留两端
+                # rgb_img = cv2.imread('structural_anomalies/' + item.split('_')[2] + '.png')
+                # rgb_img = cv2.imread('good/' + item.split('_')[1] + '.png')
+                # rgb_img = cv2.resize(rgb_img, (448, 448))
+                rgb_img = cv2.cvtColor(raw_image, cv2.COLOR_RGB2BGR)
+
+                white_pixel_nums = []
+                red_pixel_nums = []
+                for i in range(1, num_labels_rects): # 跳过背景
+                    mask = (labels_rects == i).astype(np.uint8) * 255
+                    white_pixel_num = np.count_nonzero(mask)
+                    white_pixel_nums.append(white_pixel_num)
+                        
+                    rgb_img2 = apply_binary_mask(mask, rgb_img)
+                    red_pixel_num = count_red_pixels_rgb(rgb_img2)
+                    red_pixel_nums.append(red_pixel_num)
+                
+                only_line = cv2.subtract(binary, rect_mask)
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+                only_line = cv2.morphologyEx(only_line, cv2.MORPH_OPEN, kernel_open)
+                
+                ###
+                # line
+                rgb_line_img = apply_binary_mask(only_line, rgb_img)
+                # 判读line颜色
+                b, g, r = cv2.split(rgb_line_img)
+                red_mask = (r > g + 125) & (r > b + 125)
+                yellow_mask = (r > 125) & (g > 125) & (b < 100)
+                blue_mask = (b > g + 25) & (b > r + 25)
+                red_pixels = np.sum(red_mask)
+                yellow_pixels = np.sum(yellow_mask)
+                blue_pixels = np.sum(blue_mask)
+                color_counts = {'red': red_pixels, 'yellow': yellow_pixels, 'blue': blue_pixels}
+                dominant_color = max(color_counts, key=color_counts.get)
+                
+                if dominant_color == 'red':
+                    num_line_component = count_line_component(rgb_line_img, red_mask)
+                elif dominant_color == 'yellow':
+                    num_line_component = count_line_component(rgb_line_img, yellow_mask)
+                else:
+                    num_line_component = count_line_component(rgb_line_img, blue_mask)
+                ###
+                
+                num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(only_line, connectivity=8)
+                min_area = 1000  # 面积阈值
+                final_line = np.zeros_like(only_line)
+                for i in range(1, num_labels):  # 跳过背景
+                    if stats[i, cv2.CC_STAT_AREA] >= min_area:
+                        final_line[labels == i] = 255
+                num_labels_line, labels_line, stats_line, _ = cv2.connectedComponentsWithStats(final_line, connectivity=8)
+
+                ratio = 0
+                if len(white_pixel_nums) == 2 and (len(red_pixel_nums) == 2):
+                    # connect_area_ratio = max(white_pixel_nums) / min(white_pixel_nums)
+                    # red_area_ratio = max(red_pixel_nums) / min(red_pixel_nums)
+                    red_count1 = red_pixel_nums[0]
+                    connect_count1 = white_pixel_nums[0]
+                    red_count2 = red_pixel_nums[1]
+                    connect_count2 = white_pixel_nums[1]
+                    ratio = max((connect_count1-red_count1)/connect_count1, (connect_count2-red_count2)/connect_count2)
+                return ratio, component_count, num_labels_rects-1, num_labels_line-1, num_line_component-1 # mask中连通域数量、两端连接器数量、线缆数量（良品对应三项数量：1，2，1）('-1'因为第0个连通域为背景)
 
             sam_mask_max_area = sorted_masks[0]['segmentation']  # background
             binary = (sam_mask_max_area == 0).astype(
@@ -624,7 +746,13 @@ class Model(nn.Module):
 
             #  object count hist for default
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
-            component_count, connector_count, line_count = cal_component_num(binary)
+            # component_count, connector_count, line_count = cal_component_num(binary)
+            ratio, component_count, connector_count, line_count, num_line_component = cal_component_num(binary, raw_image)
+            if (ratio > 0.53):
+                self.anomaly_flag = True
+            if num_line_component != 1:
+                self.anomaly_flag = True
+            
             if (component_count != 1 or connector_count != 2 or line_count != 1) and self.anomaly_flag is False:
                 self.anomaly_flag = True
 
@@ -641,6 +769,16 @@ class Model(nn.Module):
             left, right = erode_binary[:, :int(w / 2)], erode_binary[:, int(w / 2):]
             left_count = np.bincount(left.reshape(-1), minlength=self.classes)[1]  # foreground
             right_count = np.bincount(right.reshape(-1), minlength=self.classes)[1]  # foreground
+            ###
+            hist_r_l = np.bincount((raw_image[:,:224,::-1]*(cv2.cvtColor(left, cv2.COLOR_GRAY2BGR)))[:,:,2].ravel(), minlength=256)[10:]
+            hist_r_r = np.bincount((raw_image[:,224:,::-1]*(cv2.cvtColor(right, cv2.COLOR_GRAY2BGR)))[:,:,2].ravel(), minlength=256)[10:]
+            norm_hist_r_l = hist_r_l / np.linalg.norm(hist_r_l)
+            norm_hist_r_r = hist_r_r / np.linalg.norm(hist_r_r)
+            sim_r = norm_hist_r_l @ norm_hist_r_r.T
+            if sim_r < 0.8:
+                print('color.')
+                self.anomaly_flag = True
+            ###
 
             binary_cable = (patch_merge_sam == 1).astype(np.uint8)
 
@@ -1745,8 +1883,11 @@ class Model(nn.Module):
                     pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
 
                 elif self.class_name == 'juice_bottle':
-                    a1 = 1/(1+7+0)
-                    a2 = 7/(1+7+0)
+                    # a1 = 1/(1+7+0)
+                    # a2 = 7/(1+7+0)
+                    # a3 = 0
+                    a1 = 1/(1+5+0)
+                    a2 = 5/(1+5+0)
                     a3 = 0
                     pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
                 elif self.class_name == 'screw_bag':
@@ -1755,7 +1896,12 @@ class Model(nn.Module):
                     a3 = 16/(1+2+16)
                     pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
                 else:
-                    pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+                    a1 = 1
+                    a2 = 0
+                    a3 = 0
+                    pred_score = a1*standard_structural_score + a2*standard_instance_hungarian_match_score + a3*standard_hist_score
+            
+                    # pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
 
             def sigmoid(z):
                 return 1 / (1 + np.exp(-z))
