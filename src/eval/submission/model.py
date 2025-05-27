@@ -56,6 +56,14 @@ class FastSAMSegmenterFormatted:
                                      conf=0.25,
                                      iou=0.7,
                                      verbose=False)
+        elif class_name == 'screw_bag':
+            results = self.model_fastsam(raw_image_np_rgb,
+                                     device=self.device,
+                                     retina_masks=True,
+                                     imgsz=1024,#height, # 使用原始高度，或自定义
+                                     conf=0.25,
+                                     iou=0.7,
+                                     verbose=False)
         else:
             results = self.model_fastsam(raw_image_np_rgb,
                                      device=self.device,
@@ -144,37 +152,37 @@ class Model(nn.Module):
         self.embed_dim = 768
         self.vision_width = 1024
 
-        # --- 策略3：使用更小的SAM模型 ---
-        SAM_MODEL_TYPE = "vit_h" #  "vit_h"、"vit_b"
-        SAM_CHECKPOINT_URL_BASE = "https://dl.fbaipublicfiles.com/segment_anything/"
-        SAM_CHECKPOINTS = {
-            "vit_h": "sam_vit_h_4b8939.pth",
-            "vit_l": "sam_vit_l_0b3195.pth",
-            "vit_b": "sam_vit_b_01ec64.pth",
-        }
-        checkpoint_url = SAM_CHECKPOINT_URL_BASE + SAM_CHECKPOINTS[SAM_MODEL_TYPE]
-        self.model_sam = sam_model_registry[SAM_MODEL_TYPE]()
-        try:
-            state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, progress=True, map_location=self.device)
-            self.model_sam.load_state_dict(state_dict)
-            # print(f"Successfully loaded SAM model: {SAM_MODEL_TYPE}")
-        except Exception as e:
-            print(f"下载或加载 SAM ({SAM_MODEL_TYPE}) 权重失败: {e}")
-            print("请检查网络连接、URL或本地权重路径是否正确。")
-        self.model_sam.to(self.device).eval()
-        # self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
-        # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
-        self.mask_generator = SamAutomaticMaskGenerator(
-            model=self.model_sam,
-            points_per_side=16,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
-            # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
-            # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
-            # box_nms_thresh=0.7, # 默认。
-            # min_mask_region_area=100,  # 默认 0。设置一个合理的最小面积（例如根据您的目标对象大小）可以过滤掉很多小噪声掩码。
-            # points_per_batch=64, # 默认。如果显存足够，可以尝试增大；如果显存不足，可以减小。对总时间影响可能不大。
-            # crop_n_layers=0, # 默认。 设为0表示不使用裁剪预测，可能会更快。
-            # crop_n_points_downscale_factor=1 # 默认。
-        )
+        # # --- 策略3：使用更小的SAM模型 ---
+        # SAM_MODEL_TYPE = "vit_h" #  "vit_h"、"vit_b"
+        # SAM_CHECKPOINT_URL_BASE = "https://dl.fbaipublicfiles.com/segment_anything/"
+        # SAM_CHECKPOINTS = {
+        #     "vit_h": "sam_vit_h_4b8939.pth",
+        #     "vit_l": "sam_vit_l_0b3195.pth",
+        #     "vit_b": "sam_vit_b_01ec64.pth",
+        # }
+        # checkpoint_url = SAM_CHECKPOINT_URL_BASE + SAM_CHECKPOINTS[SAM_MODEL_TYPE]
+        # self.model_sam = sam_model_registry[SAM_MODEL_TYPE]()
+        # try:
+        #     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, progress=True, map_location=self.device)
+        #     self.model_sam.load_state_dict(state_dict)
+        #     # print(f"Successfully loaded SAM model: {SAM_MODEL_TYPE}")
+        # except Exception as e:
+        #     print(f"下载或加载 SAM ({SAM_MODEL_TYPE}) 权重失败: {e}")
+        #     print("请检查网络连接、URL或本地权重路径是否正确。")
+        # self.model_sam.to(self.device).eval()
+        # # self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
+        # # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
+        # self.mask_generator = SamAutomaticMaskGenerator(
+        #     model=self.model_sam,
+        #     points_per_side=16,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
+        #     # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
+        #     # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
+        #     # box_nms_thresh=0.7, # 默认。
+        #     # min_mask_region_area=100,  # 默认 0。设置一个合理的最小面积（例如根据您的目标对象大小）可以过滤掉很多小噪声掩码。
+        #     # points_per_batch=64, # 默认。如果显存足够，可以尝试增大；如果显存不足，可以减小。对总时间影响可能不大。
+        #     # crop_n_layers=0, # 默认。 设为0表示不使用裁剪预测，可能会更快。
+        #     # crop_n_points_downscale_factor=1 # 默认。
+        # )
 
         # 替换为fastsam
         self.segmenter = FastSAMSegmenterFormatted(device=self.device)
@@ -553,7 +561,11 @@ class Model(nn.Module):
                 patch_feature = F.normalize(patch_feature, dim=-1)
                 mem_patch_feature = F.normalize(mem_patch_feature, dim=-1)
                 normal_map_patchcore = (patch_feature @ mem_patch_feature.T)
-                topk_vals, _ = normal_map_patchcore.topk(k=3, dim=1)
+                if self.class_name == 'splicing_connectors':
+                    k_topk = 5
+                else:
+                    k_topk = 3
+                topk_vals, _ = normal_map_patchcore.topk(k=k_topk, dim=1)
                 normal_map_patchcore = topk_vals.mean(1).cpu().numpy()
                 # normal_map_patchcore = (normal_map_patchcore.max(1)[0]).cpu().numpy() # 1: normal 0: abnormal   
                 anomaly_map_patchcore = 1 - normal_map_patchcore 
@@ -578,7 +590,7 @@ class Model(nn.Module):
             cv2.imwrite(debug_image_name, foreground_mask * 255)
             
             # 1. 为测试样本提取传统特征
-            test_features = self.extract_traditional_features(np_image, foreground_mask)
+            test_features = self.extract_traditional_features_v2(np_image, foreground_mask)
             if test_features is None:
                 test_features = np.zeros(self.traditional_feature_dim)
             
@@ -706,7 +718,44 @@ class Model(nn.Module):
         #     masks = self.segmenter.generate_masks_formatted(raw_image, self.class_name)
         masks = self.segmenter.generate_masks_formatted(raw_image, self.class_name)
         # self.predictor.set_image(raw_image)
-
+        masks_ori = masks.copy()
+        if self.class_name == 'pushpins':
+            grid_masks = []
+            for mask_info in masks_ori[0:]:
+                bottom_forbidden_zone = {
+                    "x_min": 0,
+                    "x_max": width,
+                    "y_min": height * 0.93,
+                    "y_max": height 
+                }
+                if mask_info['area'] < 1200: 
+                    continue
+                mask = mask_info['segmentation'].astype(np.uint8) * 255
+                x, y, w, h = mask_info['bbox']
+                center_x = x + w / 2
+                center_y = y + h / 2
+                if (bottom_forbidden_zone["x_min"] < center_x < bottom_forbidden_zone["x_max"] and
+                    bottom_forbidden_zone["y_min"] < center_y < bottom_forbidden_zone["y_max"]):
+                    continue
+                # 缩小 bbox 到中心区域（缩一半）
+                cx, cy = x + w // 4, y + h // 4
+                cw, ch = w // 2, h // 2
+                center_mask = mask[cy:cy+ch, cx:cx+cw]
+                # 提取图像中心区域
+                bgr_image = cv2.cvtColor(raw_image, cv2.COLOR_RGB2BGR)
+                center_image = bgr_image[cy:cy+ch, cx:cx+cw]  # bgr_image 是原图 BGR
+                # 掩码区域内像素
+                hsv_image = cv2.cvtColor(center_image, cv2.COLOR_BGR2HSV)
+                h_channel, s_channel, v_channel = cv2.split(hsv_image)
+                # 在整个中心区域中查找符合条件的像素
+                valid = np.logical_and.reduce([
+                    h_channel >= 0, h_channel <= 50,
+                    s_channel >= 0, s_channel <= 50,
+                    v_channel >= 100, v_channel <= 200
+                ])
+                if np.sum(valid) > 50:
+                    continue  # 过滤掉这种 mask
+                grid_masks.append(mask_info)
         no_pushpins_detected = False
         if self.class_name == 'pushpins':
             # 默认假设检测到了图钉
@@ -886,6 +935,16 @@ class Model(nn.Module):
                 if multiple_in_one_grid:
                     self.anomaly_flag = True
                     print("异常：以下格子含有多个图钉：", multiple_in_one_grid)
+
+            # ✅ 新增逻辑：格子的面积不能大于 20000（实际效果受限于fastsam并不能准确分割出每个格子）
+            if pushpins_count == self.pushpins_count and self.anomaly_flag is False:
+                for mask_info in grid_masks:
+                    x, y, w, h = mask_info['bbox']
+                    area = w * h
+                    if area > 20000:
+                        self.anomaly_flag = True
+                        print("anomaly: Missing_separator")
+                        break
 
             # patch hist 
             clip_patch_hist = np.bincount(patch_mask.reshape(-1), minlength=self.patch_query_obj.shape[0])
@@ -1291,7 +1350,7 @@ class Model(nn.Module):
                     foreground_mask = results['binary_foreground']
                     few_shot_data.append((np_image, foreground_mask))
                     # 提取传统特征
-                    traditional_features = self.extract_traditional_features(np_image, foreground_mask)
+                    traditional_features = self.extract_traditional_features_v2(np_image, foreground_mask)
                     if traditional_features is not None:
                         # 如果维度还未设置，就用第一个成功提取的特征向量长度来设置它
                         if self.traditional_feature_dim is None:
@@ -1466,6 +1525,114 @@ class Model(nn.Module):
         # 最终的特征向量
         final_feature_vector = np.concatenate([mean_features, std_features])
         # 将任何可能残余的NaN, inf, -inf值都替换为0
+        final_feature_vector = np.nan_to_num(final_feature_vector, nan=0.0, posinf=0.0, neginf=0.0)
+            
+        return final_feature_vector
+    
+    def extract_traditional_features_v2(self, img_rgb: np.ndarray, foreground_mask: np.ndarray) -> np.ndarray | None:
+        """
+        【优化版】从图像和掩码中提取传统CV特征。
+        该函数通过更优的特征选择和聚合方式，增强了对单个异常物体的敏感度，
+        同时保持返回一个固定长度的特征向量。
+
+        Args:
+            img_rgb (np.ndarray): rgb格式的输入图像 (H, W, 3), uint8.
+            foreground_mask (np.ndarray): 前景掩码 (H, W), uint8, 0代表背景, >0代表前景.
+
+        Returns:
+            np.ndarray | None: 包含所有聚合后特征的一维Numpy数组，如果无有效轮廓则返回None。
+        """
+        # 0. 图像预处理
+        gray_image = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+        lab_image = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2LAB)
+
+        # 1. 寻找所有独立的物体轮廓
+        contours, _ = cv2.findContours(foreground_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 32]
+
+        # 如果没有检测到前景，直接返回None或一个预定义的零向量
+        if not valid_contours:
+            return None 
+
+        all_features_per_contour = []
+        
+        for cnt in valid_contours:
+            contour_features = []
+            moments = cv2.moments(cnt)
+            area = moments['m00']
+            
+            # --- 特征 A: 形状 (Shape) - 优化选择 ---
+            # 1. Hu矩 (7个) - 保留，非常稳定
+            hu_moments = cv2.HuMoments(moments).flatten()
+            log_hu_moments = -np.sign(hu_moments) * np.log10(np.abs(hu_moments) + 1e-7)
+            contour_features.extend(log_hu_moments)
+
+            # 2. 密实度 (Solidity) - 【新增】对破损/凹陷敏感
+            hull = cv2.convexHull(cnt)
+            hull_area = cv2.contourArea(hull)
+            solidity = area / hull_area if hull_area > 0 else 0
+            contour_features.append(solidity)
+            
+            # 3. 延展度 (Aspect Ratio) - 【新增】对弯曲/拉伸敏感
+            x, y, w, h = cv2.boundingRect(cnt)
+            aspect_ratio = w / h if h > 0 else 0
+            contour_features.append(aspect_ratio)
+
+            # 4. 圆形度 (Circularity) - 保留
+            perimeter = cv2.arcLength(cnt, True)
+            circularity = (4 * np.pi * area) / (perimeter**2) if perimeter > 0 else 0
+            contour_features.append(circularity)
+
+            # --- 特征 B: 颜色 (Color) - 优化方法 ---
+            # 5. L*a*b* 颜色统计量 (6个) - 【改进】更高效、更符合感知
+            single_contour_mask = np.zeros(gray_image.shape, dtype="uint8")
+            cv2.drawContours(single_contour_mask, [cnt], -1, 255, thickness=cv2.FILLED)
+            
+            for i in range(3): # L, a, b 三个通道
+                channel_pixels = lab_image[:, :, i][single_contour_mask > 0]
+                if channel_pixels.size > 0:
+                    mean, std = cv2.meanStdDev(channel_pixels)
+                    contour_features.extend([mean[0][0], std[0][0]])
+                else:
+                    contour_features.extend([0, 0])
+
+            # --- 特征 C: 纹理 (Texture) - 保留 ---
+            # 6. LBP 直方图 (10个)
+            P, R = 8, 1
+            roi_gray = gray_image[y:y+h, x:x+w]
+            roi_mask = single_contour_mask[y:y+h, x:x+w]
+            
+            if roi_gray.size > 0:
+                lbp = local_binary_pattern(roi_gray, P, R, method="uniform")
+                (lbp_hist, _) = np.histogram(lbp[roi_mask > 0], bins=np.arange(0, P + 3), range=(0, P + 2))
+                lbp_hist = lbp_hist.astype("float")
+                lbp_hist /= (lbp_hist.sum() + 1e-6)
+                contour_features.extend(lbp_hist)
+            else:
+                contour_features.extend(np.zeros(P + 2))
+
+            all_features_per_contour.append(np.array(contour_features))
+
+        # --- 特征聚合 (Aggregation) - 关键改进 ---
+        features_matrix = np.array(all_features_per_contour)
+        
+        # a. 计算更丰富的统计量来描述这组物体的特征分布
+        mean_features = np.mean(features_matrix, axis=0)
+        std_features = np.std(features_matrix, axis=0)
+        median_features = np.median(features_matrix, axis=0)
+
+        # c. 拼接所有特征形成最终的、固定长度的向量
+        final_feature_vector = np.concatenate([
+            # object_count, 
+            mean_features, 
+            std_features, 
+            # min_features, 
+            # max_features, 
+            median_features
+        ])
+        
+        # 替换所有可能出现的NaN或inf值，增强鲁棒性
         final_feature_vector = np.nan_to_num(final_feature_vector, nan=0.0, posinf=0.0, neginf=0.0)
             
         return final_feature_vector
