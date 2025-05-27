@@ -1242,7 +1242,7 @@ class Model(nn.Module):
                 if np.sum(temp_mask) <= 300: # 448x448 300
                     binary[temp_mask] = 0 # set to background
             clusted_masks[-1] = binary
-        return clusted_masks, boxes, label_ids, pil_img
+        return clusted_masks, boxes, obj_names, label_ids, pil_img
 
 
 
@@ -1272,7 +1272,7 @@ class Model(nn.Module):
                 all_area_hists = list()
                 all_color_hists = list()
                 for idx, sample in enumerate(few_shot_samples):
-                    clusted_masks, boxes, label_ids, pil_img = self.generate_mask(sample)
+                    clusted_masks, boxes, obj_names, label_ids, pil_img = self.generate_mask(sample)
                     area_hist = list()
                     color_hist = list()
                     # 转换为LAB色彩空间
@@ -1696,7 +1696,30 @@ class Model(nn.Module):
 
             results.append(float(hole_radius))
         return results
-
+    def compute_juice_color_area(self, hsv,):
+        COLOR_HSV_RANGES = {
+            'red': [([0, 100, 50], [10, 255, 200]),],  # 红色有两个H区段
+            'yellow': [([20, 80, 80], [45, 255, 255])],
+            'milky_white': [([15, 5, 80], [80, 100, 255])]  # 乳白色：低饱和度，高亮度
+        }
+        max_height = 0
+        detected_color = 'unknown'
+        liquid_top = 1600
+        for color_name, hsv_ranges in COLOR_HSV_RANGES.items():
+            for lower, upper in hsv_ranges:
+                lower_np = np.array(lower)
+                upper_np = np.array(upper)
+                mask = cv2.inRange(hsv, lower_np, upper_np)
+                contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if contours:
+                    largest_contour = max(contours, key=cv2.contourArea)
+                    x, y, w, h = cv2.boundingRect(largest_contour)
+                    if h > max_height:
+                        detected_color = color_name
+                        liquid_top = y
+                        max_height = h
+        return liquid_top, detected_color
+    
     def forward(self, batch: torch.Tensor) -> dict[str, torch.Tensor]:
         """Forward pass of the model.
 
@@ -1714,14 +1737,16 @@ class Model(nn.Module):
             pred_score=torch.zeros(batch_size, device=image.device),
         )
         '''
-        if self.class_name == "screw_bag" or self.class_name == "breakfast_box":
+        if self.class_name == "screw_bag" or self.class_name == "breakfast_box" or self.class_name == "juice_bottle":
             self.scew_bag_abnormal_flag = 0
             self.breakfast_box_abnormal_flag = 0
+            self.bottle_abnormal_flag = 0
+
             heatmap_cache = dict()
             area_hist = list()
             color_hist = list()
             if self.gdino_init:
-                clusted_masks, boxes, label_ids, pil_img = self.generate_mask(batch[0])
+                clusted_masks, boxes, obj_names, label_ids, pil_img = self.generate_mask(batch[0])
                 if self.class_name == "breakfast_box":
                     rgb_img = np.array(pil_img)
                     binary = clusted_masks[4]
@@ -1774,6 +1799,115 @@ class Model(nn.Module):
                                     nuts.append(i)
                             if (len(circles) + len(nuts) >= 4) and len(circles) != 2 or len(nuts) != 2:
                                 self.scew_bag_abnormal_flag = 1
+                if self.class_name == "juice_bottle":
+                    # 标签个数检查
+                    binary = clusted_masks[-1]
+                    binary = cv2.resize(binary, (800, 1600), interpolation=cv2.INTER_NEAREST)
+                    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary)
+
+                    for i in range(1, num_labels):
+                        temp_mask = labels == i
+                        if np.sum(temp_mask) <= 300: # 448x448 64
+                            binary[temp_mask] = 0 # set to background
+                    tag_num_labels, labels_tag, stats_tag, centroids_tag = cv2.connectedComponentsWithStats(binary)
+                    if tag_num_labels >= 3:
+                        sorted_indices = np.argsort(stats_tag[1:, cv2.CC_STAT_AREA])[::-1]
+                        largest_labels = sorted_indices[:2] + 1
+                        # 标签距离有问题， 打印质心的距离
+                        dist_x = list()
+                        dist_y = list()
+                        for i in largest_labels:
+                            # 计算两个标签的质心距离
+                            if i < 1 or i >= num_labels:
+                                continue
+                            centroid = centroids_tag[i]
+                            dist_x.append(centroid[0])
+                            dist_y.append(centroid[1])
+                        x_dist = abs(dist_x[0] - dist_x[1])
+                        y_dist = abs(dist_y[0] - dist_y[1])
+                        if x_dist > 50 or y_dist > 520 or y_dist < 350:
+                            # print(f"{abs(dist_x[0] - dist_x[1])} {abs(dist_y[0] - dist_y[1])} 标签距离异常")
+                            self.bottle_abnormal_flag = 1
+                        # 标签互换
+                        if dist_y[0] > dist_y[1]:
+                            # print(f" {dist_y[0]} {dist_y[1]} 标签互换")
+                            self.bottle_abnormal_flag = 1
+                    else:
+                        # print(f"标签个数异常: {tag_num_labels}")
+                        self.bottle_abnormal_flag = 1
+                    binary = clusted_masks[-2]
+                    binary = cv2.resize(binary, (800, 1600), interpolation=cv2.INTER_NEAREST)
+                    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary)
+
+                    for i in range(1, num_labels):
+                        temp_mask = labels == i
+                        if np.sum(temp_mask) <= 300: # 448x448 64
+                            binary[temp_mask] = 0 # set to background
+                    num_labels_fruit, labels_fruit, stats_fruit, centroids_fruit = cv2.connectedComponentsWithStats(binary)
+
+                    if num_labels_fruit < 2:
+                        # print(f"with {num_labels - 1} 水果没有异常.")
+                        self.bottle_abnormal_flag = 1
+                    elif num_labels_fruit >= 2 and tag_num_labels >= 3:
+                        # 水果位置异常
+                        sorted_indices = np.argsort(stats_tag[1:, cv2.CC_STAT_AREA])[::-1]
+                        largest_idx = sorted_indices[:1] + 1
+                        # 标签质心
+                        c1 = centroids_tag[largest_idx[0]]
+                        # 水果质心
+                        c2 = centroids_fruit[1]
+                        # num_labels_fruit >2 求平均质心
+                        if num_labels_fruit > 2:
+                            c2 = np.mean(centroids_fruit[1:], axis=0)
+                        # 计算距离
+                        dist_x = abs(c1[0] - c2[0])
+                        dist_y = abs(c1[1] - c2[1])
+                        if dist_x > 30 or dist_y > 36:
+                            # print(f"{dist_x} {dist_y} 水果位置异常")
+                            self.bottle_abnormal_flag = 1
+                    binary = clusted_masks[0]
+
+                    binary = cv2.resize(binary, (800, 1600), interpolation=cv2.INTER_NEAREST)
+                    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary)
+
+                    for i in range(1, num_labels):
+                        temp_mask = labels == i
+                        if np.sum(temp_mask) <= 300: # 448x448 64
+                            binary[temp_mask] = 0 # set to background
+                    rgb_img = np.array(pil_img)
+                    rgb_img = cv2.resize(rgb_img, (800, 1600), interpolation=cv2.INTER_LINEAR)
+                    avg_color = []
+                    if np.sum(binary > 0) > 100:
+                        for channel in range(rgb_img.shape[2]):
+                            channel_avg = np.mean(rgb_img[:,:,channel][binary > 0])
+                            avg_color.append(float(channel_avg))
+                        if avg_color[0] < 95 :
+                            # print(f"average color: {avg_color}")
+                            self.bottle_abnormal_flag = 1
+                        if not self.bottle_abnormal_flag:
+                            # 液体面积和颜色检查
+                            hsv = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2HSV)
+                            hsv = cv2.bitwise_and(hsv, hsv, mask=binary)
+                            liquid_top, detected_color = self.compute_juice_color_area(hsv)
+                            if liquid_top < 1600 and detected_color in ["red", "yellow", "milky_white"]:
+                                if liquid_top > 440 or liquid_top < 370:
+                                    # print(f"img_path {image_path} 液体高度异常: {liquid_top}")
+                                    self.bottle_abnormal_flag = 1
+                                # 检查颜色和水果是否匹配
+                                if len(label_ids[1]) > 0:
+                                    pred_classes = [ obj_names[i] for i in label_ids[1]]
+                                    pred_classes = set(pred_classes)
+                                    # pred_classes = [ tag.split(" ")[0] for tag in pred_classes if " " in tag]
+                                    # print(pred_classes)
+                                    if detected_color == "red" and "cherry" not in pred_classes:
+                                        # print(f"img_path {image_path} 红色液体异常: {detected_color} {pred_classes}")
+                                        self.bottle_abnormal_flag = 1
+                                    elif detected_color == "yellow" and "orange" not in pred_classes:
+                                        # print(f"img_path {image_path} 黄色液体异常: {detected_color} {pred_classes}")
+                                        self.bottle_abnormal_flag = 1
+                                    elif detected_color == "milky_white" and "banana" not in pred_classes:
+                                        # print(f"img_path {image_path} 乳白色液体异常: {detected_color} {pred_classes}")
+                                        self.bottle_abnormal_flag = 1
 
                 imglabo = cv2.cvtColor(np.array(pil_img), cv2.COLOR_BGR2LAB)
                 color_a = imglabo[:, :, 1].astype(np.float32)
@@ -1837,7 +1971,17 @@ class Model(nn.Module):
                     15 * self.scew_bag_abnormal_flag
                     ).to(self.device)
                 )
-
+            elif self.class_name == "juice_bottle":            
+                return  ImageBatch(
+                    image = batch,
+                    pred_score = torch.tensor( 
+                        10 * anomaly_map_ret_eva02.max().item() +  
+                        5 * dinov2_subcategory_mean_dists.max().item() +
+                        10 * eva02_anomaly_map_ret_part.max().item() +
+                        10 * eva02_subcategory_mean_dists.max().item() +
+                        5 * self.bottle_abnormal_flag
+                        )
+                    )
             else:
                 return ImageBatch(
                     image = batch,
