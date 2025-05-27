@@ -387,7 +387,6 @@ class Model(nn.Module):
         print("batch_size:", batch_size)
 
         batch_pred_scores = []
-        # batch_results = []
 
         for batch_idx in range(batch_size):
             self.image_idx += 1
