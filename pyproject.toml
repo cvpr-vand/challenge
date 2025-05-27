@@ -26,7 +26,6 @@ dependencies = [
     "yapf == 0.43.0",
     "pycocotools==2.0.8",
     "iopath==0.1.10",
-    #
 ]
 
 [tool.uv.sources]
