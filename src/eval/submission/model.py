@@ -475,8 +475,6 @@ class Model(nn.Module):
 
                 sims = []
                 for i in range(len(patch_tokens)):
-                    if i % 2 == 0:
-                        continue
                     patch_tokens_reshaped = patch_tokens[i].view(
                         int((self.image_size / 14) ** 2), 1, 1024
                     )
@@ -501,7 +499,7 @@ class Model(nn.Module):
                 anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino
 
 
-                if self.class_name in ["breakfast_box"]:
+                if self.class_name in ["breakfast_box", "pushpins"]:
                     structure_score = anomaly_map_structure.topk(5)[0].mean().item()
                 else:
                     structure_score = anomaly_map_structure.max().item()
