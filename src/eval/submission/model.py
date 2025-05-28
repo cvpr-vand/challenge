@@ -497,7 +497,7 @@ class Model(nn.Module):
 
                 anomaly_map_ret_dino = 1 - sim_max_dino
                 anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino
-
+                structure_score_clip = anomaly_map_ret.max().item()
 
                 if self.class_name in ["breakfast_box", "pushpins"]:
                     structure_score = anomaly_map_structure.topk(5)[0].mean().item()
@@ -548,7 +548,10 @@ class Model(nn.Module):
             else:
                 logical_score += compute_logical_score(masks, self.class_name, self.image_idx)
             
-            final_score = 1 * logical_score + 1 * structure_score
+            if self.class_name == "pushpins":
+                final_score = 1 * logical_score + 1 * structure_score + 1 * structure_score_clip
+            else:
+                final_score = 1 * logical_score + 1 * structure_score
             batch_pred_scores.append(final_score)
             
         pred_scores = torch.tensor(batch_pred_scores, device=image.device)       

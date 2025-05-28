@@ -1939,13 +1939,27 @@ def compute_logical_score(masks, class_name, image_idx):
 
     if class_name == "breakfast_box":
 
-        if logical_features[0]['avg_color'][0] < 43 or logical_features[0]['avg_color'][0] > 63.5 or logical_features[0]['avg_color'][1] < 67 or logical_features[0]['avg_color'][1] > 104 or logical_features[0]['avg_color'][2] < 136.5 or logical_features[0]['avg_color'][2] > 207.5:
+        small_orange_color = [53.25, 85.5, 172]
+        big_orange_color = [59, 87.5, 150.75]
+        peach_color = [61.5, 94.5, 146.25]
+        nut_color = [58.25, 92.25, 142.75]
+        box_color = [179, 193.75, 217]
+
+        if abs(logical_features[0]['avg_color'][0] - small_orange_color[0]) > 10.25 or abs(logical_features[0]['avg_color'][1] - small_orange_color[1]) > 18.5 or abs(logical_features[0]['avg_color'][2] - small_orange_color[2]) > 35.5:
             logical_score += 1
 
-        if logical_features[1]['avg_color'][0] < 42 or logical_features[1]['avg_color'][0] > 76 or logical_features[1]['avg_color'][1] < 43.5 or logical_features[1]['avg_color'][1] > 131.5 or logical_features[1]['avg_color'][2] < 99 or logical_features[1]['avg_color'][2] > 202.5:
+        if abs(logical_features[1]['avg_color'][0] - big_orange_color[0]) > 17 or abs(logical_features[1]['avg_color'][1] - big_orange_color[1]) > 44 or abs(logical_features[1]['avg_color'][2] - big_orange_color[2]) > 51.75:
             logical_score += 1
 
-        if logical_features[2]['avg_color'][0] < 42 or logical_features[2]['avg_color'][0] > 81 or logical_features[2]['avg_color'][1] < 41 or logical_features[2]['avg_color'][1] > 148 or logical_features[2]['avg_color'][2] < 87 or logical_features[2]['avg_color'][2] > 205.5:
+        if abs(logical_features[2]['avg_color'][0] - peach_color[0]) > 19.5 or abs(logical_features[2]['avg_color'][1] - peach_color[1]) > 53.5 or abs(logical_features[2]['avg_color'][2] - peach_color[2]) > 59.25:
+            logical_score += 1
+
+        if abs(logical_features[4]['avg_color'][0] - nut_color[0]) > 3.75 or abs(logical_features[4]['avg_color'][1] - nut_color[1]) > 6.25 or abs(logical_features[4]['avg_color'][2] - nut_color[2]) > 7.25:
+            print("4 color")
+            logical_score += 1
+
+        if abs(logical_features[5]['avg_color'][0] - box_color[0]) > 7 or abs(logical_features[5]['avg_color'][1] - box_color[1]) > 6.25 or abs(logical_features[5]['avg_color'][2] - box_color[2]) > 6:
+            print("5 color")
             logical_score += 1
 
         if (logical_features[0]['centroid'][1] + logical_features[1]['centroid'][1] + logical_features[2]['centroid'][1]) / 3 > 128:
@@ -1989,14 +2003,17 @@ def compute_logical_score(masks, class_name, image_idx):
     if class_name == "juice_bottle":
 
         if logical_features[1]['area'] < 1600 or logical_features[1]['area'] > 1900:
-                    logical_score += 1
+            logical_score += 1
         if logical_features[2]['area'] < 3000 or logical_features[2]['area'] > 3700:
             logical_score += 1
 
-        if logical_features[1]['avg_color'][0] < 75 or logical_features[1]['avg_color'][0] > 128 or logical_features[1]['avg_color'][1] < 144 or logical_features[1]['avg_color'][1] > 182 or logical_features[1]['avg_color'][2] < 176 or logical_features[1]['avg_color'][2] > 206.5:
+        label_1_color = [101.5, 163, 191]
+        label_2_color = [100, 198.5, 234]
+
+        if abs(logical_features[1]['avg_color'][0] - label_1_color[0]) > 26.5 or abs(logical_features[1]['avg_color'][1] - label_1_color[1]) > 19 or abs(logical_features[1]['avg_color'][2] - label_1_color[2]) > 15:
             logical_score += 1
         
-        if logical_features[2]['avg_color'][0] < 77 or logical_features[2]['avg_color'][0] > 123 or logical_features[2]['avg_color'][1] < 175 or logical_features[2]['avg_color'][1] > 222 or logical_features[2]['avg_color'][2] < 220 or logical_features[2]['avg_color'][2] > 248:
+        if abs(logical_features[2]['avg_color'][0] - label_2_color[0]) > 23 or abs(logical_features[2]['avg_color'][1] - label_2_color[1]) > 23.5 or abs(logical_features[2]['avg_color'][2] - label_2_color[2]) > 14:
             logical_score += 1
 
         stand_banana_color = [97, 109, 113.5]
@@ -2173,16 +2190,21 @@ def compute_logical_score(masks, class_name, image_idx):
                 logical_score += 1
 
     if class_name == "screw_bag":
+
+        screw_1_color = [156.75, 156, 146.5]
+        screw_2_color = [154.75, 156.5, 149.5]
+
         if logical_features[0]['area'] < 2050 or logical_features[0]['area'] > 2550:
             logical_score += 1
         if logical_features[3]['area'] < 2450 or logical_features[3]['area'] > 3150:
             logical_score += 1
 
-        if logical_features[4]['avg_color'][0] < 128 or logical_features[4]['avg_color'][0] > 185.5 or logical_features[4]['avg_color'][1] < 125 or logical_features[4]['avg_color'][1] > 187 or logical_features[4]['avg_color'][2] < 116 or logical_features[4]['avg_color'][2] > 177:
+        if abs(logical_features[4]['avg_color'][0] - screw_1_color[0]) > 29 or abs(logical_features[4]['avg_color'][1] - screw_1_color[1]) > 31 or abs(logical_features[4]['avg_color'][2] - screw_1_color[2]) > 31:
             logical_score += 1
 
-        if logical_features[5]['avg_color'][0] < 124 or logical_features[5]['avg_color'][0] > 185.5 or logical_features[5]['avg_color'][1] < 119 or logical_features[5]['avg_color'][1] > 194 or logical_features[5]['avg_color'][2] < 108 or logical_features[5]['avg_color'][2] > 191:
+        if abs(logical_features[5]['avg_color'][0] - screw_2_color[0]) > 31 or abs(logical_features[5]['avg_color'][1] - screw_2_color[1]) > 37.5 or abs(logical_features[5]['avg_color'][2] - screw_2_color[2]) > 41.5:
             logical_score += 1
+
         if logical_features[4]["enclosing_circle_diameter"] > 200 and logical_features[5]["enclosing_circle_diameter"] > 200:
             logical_score += 1
         if logical_features[4]["enclosing_circle_diameter"] < 200 and logical_features[5]["enclosing_circle_diameter"] < 200:
