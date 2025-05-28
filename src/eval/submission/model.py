@@ -868,38 +868,38 @@ class Model(nn.Module):
             binary_noclip = np.isin(merge_sam_noclip, self.foreground_label_idx[self.class_name]).astype(np.uint8) # foreground 1  background 0
             dilate_binary_noclip = cv2.dilate(binary_noclip, kernel)
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilate_binary, connectivity=8)
-            pushpins_count = 0
-            valid_centroids = []
-            for i in range(1, num_labels):
-                if stats[i, cv2.CC_STAT_AREA] < 100: continue
-                x, y, w, h, _ = stats[i]
-                instance_mask = (labels[y:y+h, x:x+w] == i).astype(np.uint8) * 255
-                instance_image = raw_image[y:y+h, x:x+w]
-                # image = Image.fromarray(instance_image, mode='RGB')
-                # image.save("special_variable_image.png")
-                # debug_dir = "debug_images"
-                # os.makedirs(debug_dir, exist_ok=True)
-                # pushpin_masks_name = os.path.join(debug_dir, "pushpin_masks.png")
-                # cv2.imwrite(pushpin_masks_name, instance_mask)
-                instance_image = cv2.cvtColor(instance_image, cv2.COLOR_RGB2BGR)
-                hsv_instance_only = cv2.bitwise_and(instance_image, instance_image, mask=instance_mask)
-                hsv_instance = cv2.cvtColor(hsv_instance_only, cv2.COLOR_BGR2HSV)
-                HEAD_YELLOW_LOWER = np.array([15, 180, 46])
-                HEAD_YELLOW_UPPER = np.array([35, 255, 255])
-                yellow_mask = cv2.inRange(hsv_instance, HEAD_YELLOW_LOWER, HEAD_YELLOW_UPPER)
-                # debug_dir = "debug_images"
-                # os.makedirs(debug_dir, exist_ok=True)
-                # head_masks_name = os.path.join(debug_dir, "head_masks.png")
-                # cv2.imwrite(head_masks_name, yellow_mask)
-                # yellow_mask 中非零且 instance_mask 中非零的才是有效区域
-                valid_pixels = np.logical_and(yellow_mask > 0, instance_mask > 0)
-                # 5. 计算比例
-                yellow_ratio = np.sum(valid_pixels) / np.sum(instance_mask > 0)
-                # 6. 判断是否大多数为黄色（如大于 80%）
-                if yellow_ratio > 0.5:
-                    pushpins_count += 1
-                    valid_centroids.append(centroids[i])
-            # pushpins_count = num_labels - 1 # number of pushpins
+            # pushpins_count = 0
+            # valid_centroids = []
+            # for i in range(1, num_labels):
+            #     if stats[i, cv2.CC_STAT_AREA] < 100: continue
+            #     x, y, w, h, _ = stats[i]
+            #     instance_mask = (labels[y:y+h, x:x+w] == i).astype(np.uint8) * 255
+            #     instance_image = raw_image[y:y+h, x:x+w]
+            #     # image = Image.fromarray(instance_image, mode='RGB')
+            #     # image.save("special_variable_image.png")
+            #     # debug_dir = "debug_images"
+            #     # os.makedirs(debug_dir, exist_ok=True)
+            #     # pushpin_masks_name = os.path.join(debug_dir, "pushpin_masks.png")
+            #     # cv2.imwrite(pushpin_masks_name, instance_mask)
+            #     instance_image = cv2.cvtColor(instance_image, cv2.COLOR_RGB2BGR)
+            #     hsv_instance_only = cv2.bitwise_and(instance_image, instance_image, mask=instance_mask)
+            #     hsv_instance = cv2.cvtColor(hsv_instance_only, cv2.COLOR_BGR2HSV)
+            #     HEAD_YELLOW_LOWER = np.array([15, 180, 46])
+            #     HEAD_YELLOW_UPPER = np.array([35, 255, 255])
+            #     yellow_mask = cv2.inRange(hsv_instance, HEAD_YELLOW_LOWER, HEAD_YELLOW_UPPER)
+            #     # debug_dir = "debug_images"
+            #     # os.makedirs(debug_dir, exist_ok=True)
+            #     # head_masks_name = os.path.join(debug_dir, "head_masks.png")
+            #     # cv2.imwrite(head_masks_name, yellow_mask)
+            #     # yellow_mask 中非零且 instance_mask 中非零的才是有效区域
+            #     valid_pixels = np.logical_and(yellow_mask > 0, instance_mask > 0)
+            #     # 5. 计算比例
+            #     yellow_ratio = np.sum(valid_pixels) / np.sum(instance_mask > 0)
+            #     # 6. 判断是否大多数为黄色（如大于 80%）
+            #     if yellow_ratio > 0.5:
+            #         pushpins_count += 1
+            #         valid_centroids.append(centroids[i])
+            pushpins_count = num_labels - 1 # number of pushpins
             if no_pushpins_detected:
                 pushpins_count = 0
 
@@ -916,7 +916,7 @@ class Model(nn.Module):
             # ✅ 新增逻辑：图钉数量匹配但要检查每个格子最多一个图钉
             if pushpins_count == self.pushpins_count and self.anomaly_flag is False:
                 # 图钉中心点列表
-                pushpin_centers = valid_centroids[0:]  # 去掉背景，第0个是背景
+                pushpin_centers = centroids[1:]  # 去掉背景，第0个是背景
                 # 15个格子 bbox 坐标
                 grid_boxes = [
                     (186, 42, 77, 121),(0, 37, 95, 125),(0, 169, 95, 120),(0, 300, 95, 124),(185, 169, 77, 119),(354, 300, 93, 121),(353, 170, 74, 119),
