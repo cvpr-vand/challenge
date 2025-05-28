@@ -6,6 +6,10 @@ on:
     paths:
       - "src/eval/submission/**"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.user.login }}
+  cancel-in-progress: true
+
 jobs:
   security-check:
     name: Security Check
