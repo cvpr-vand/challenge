@@ -1931,7 +1931,6 @@ def get_relative_connection_y_by_rotating_mask(other_mask, middle_mask):
     rel_y = (y_rot - y_top) / (y_bottom - y_top + 1e-5)
     return rel_y
 
-
 def compute_logical_score(masks, class_name, image_idx):
 
     logical_features = extract_mask_features(masks, cv2.imread(f"src/eval/submission/test_images/{class_name}/{str(image_idx)}/image_0.jpg"),class_name)
@@ -1939,6 +1938,16 @@ def compute_logical_score(masks, class_name, image_idx):
     logical_score = 0
 
     if class_name == "breakfast_box":
+
+        if logical_features[0]['avg_color'][0] < 43 or logical_features[0]['avg_color'][0] > 63.5 or logical_features[0]['avg_color'][1] < 67 or logical_features[0]['avg_color'][1] > 104 or logical_features[0]['avg_color'][2] < 136.5 or logical_features[0]['avg_color'][2] > 207.5:
+            logical_score += 1
+
+        if logical_features[1]['avg_color'][0] < 42 or logical_features[1]['avg_color'][0] > 76 or logical_features[1]['avg_color'][1] < 43.5 or logical_features[1]['avg_color'][1] > 131.5 or logical_features[1]['avg_color'][2] < 99 or logical_features[1]['avg_color'][2] > 202.5:
+            logical_score += 1
+
+        if logical_features[2]['avg_color'][0] < 42 or logical_features[2]['avg_color'][0] > 81 or logical_features[2]['avg_color'][1] < 41 or logical_features[2]['avg_color'][1] > 148 or logical_features[2]['avg_color'][2] < 87 or logical_features[2]['avg_color'][2] > 205.5:
+            logical_score += 1
+
         if (logical_features[0]['centroid'][1] + logical_features[1]['centroid'][1] + logical_features[2]['centroid'][1]) / 3 > 128:
             print("012 center")
             logical_score += 1
@@ -1978,6 +1987,17 @@ def compute_logical_score(masks, class_name, image_idx):
                 logical_score += 1
 
     if class_name == "juice_bottle":
+
+        if logical_features[1]['area'] < 1600 or logical_features[1]['area'] > 1900:
+                    logical_score += 1
+        if logical_features[2]['area'] < 3000 or logical_features[2]['area'] > 3700:
+            logical_score += 1
+
+        if logical_features[1]['avg_color'][0] < 75 or logical_features[1]['avg_color'][0] > 128 or logical_features[1]['avg_color'][1] < 144 or logical_features[1]['avg_color'][1] > 182 or logical_features[1]['avg_color'][2] < 176 or logical_features[1]['avg_color'][2] > 206.5:
+            logical_score += 1
+        
+        if logical_features[2]['avg_color'][0] < 77 or logical_features[2]['avg_color'][0] > 123 or logical_features[2]['avg_color'][1] < 175 or logical_features[2]['avg_color'][1] > 222 or logical_features[2]['avg_color'][2] < 220 or logical_features[2]['avg_color'][2] > 248:
+            logical_score += 1
 
         stand_banana_color = [97, 109, 113.5]
         stand_orange_color = [56, 103, 117]

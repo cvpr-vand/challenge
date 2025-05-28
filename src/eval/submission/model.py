@@ -289,9 +289,71 @@ class Model(nn.Module):
         few_shot_samples = setup_data.get("few_shot_samples")
         self.class_name = setup_data.get("dataset_category")
         self.shot = len(few_shot_samples)
-        
 
-        self.sampler = GreedyCoresetSampler(percentage= 0.3 / self.shot, device=self.device)
+        if self.class_name == "splicing_connectors" or self.class_name=="pushpins":
+            clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
+            self.image_size = 518
+            device = torch.device("cuda")
+            self.out_layers = [6, 12, 18, 24]
+
+            self.clip_model, _, self.preprocess = open_clip.create_model_and_transforms(
+                clip_name, self.image_size
+            )
+            self.clip_model.to(device)
+            self.clip_model.eval()
+
+            self.transform_clip = v2.Compose(
+                [
+                    v2.Resize((self.image_size, self.image_size)),
+                    v2.Normalize(
+                        mean=(0.48145466, 0.4578275, 0.40821073),
+                        std=(0.26862954, 0.26130258, 0.27577711),
+                    ),
+                ],
+            )
+
+            self.transform_dino = v2.Compose(
+                [
+                    v2.Resize((self.image_size, self.image_size)),
+                    v2.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+                ],
+            )
+
+            self.sampler = GreedyCoresetSampler(percentage= 0.2 / self.shot, device=self.device)
+
+        else:
+            clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
+            self.image_size = 448
+            device = torch.device("cuda")
+            self.out_layers = [6, 12, 18, 24]
+
+            self.clip_model, _, self.preprocess = open_clip.create_model_and_transforms(
+                clip_name, self.image_size
+            )
+            self.clip_model.to(device)
+            self.clip_model.eval()
+
+            self.transform_clip = v2.Compose(
+                [
+                    v2.Resize((self.image_size, self.image_size)),
+                    v2.Normalize(
+                        mean=(0.48145466, 0.4578275, 0.40821073),
+                        std=(0.26862954, 0.26130258, 0.27577711),
+                    ),
+                ],
+            )
+
+            self.transform_dino = v2.Compose(
+                [
+                    v2.Resize((self.image_size, self.image_size)),
+                    v2.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+                ],
+            )
+
+            self.sampler = GreedyCoresetSampler(percentage= 0.4 / self.shot, device=self.device)
+
+
+        
         
         if self.class_name == "screw_bag":
             few_shot_samples = rotate(few_shot_samples, 3, interpolation=InterpolationMode.BILINEAR)
@@ -422,30 +484,27 @@ class Model(nn.Module):
                     cosine_similarity_matrix = F.cosine_similarity(
                         patch_tokens_reshaped, normal_tokens_reshaped, dim=2
                     )
-
-                    if self.class_name == "pushpins":
-                        sim_max = cosine_similarity_matrix.topk(5, dim=1)[0].mean()
-                    else:
-                        sim_max, _ = torch.max(cosine_similarity_matrix, dim=1)
+                    sim_max, _ = torch.max(cosine_similarity_matrix, dim=1)
                     sims.append(sim_max)
 
                 sim = torch.mean(torch.stack(sims, dim=0), dim=0)
                 anomaly_map_ret = 1 - sim
 
-                if self.class_name in ["pushpins", "screw_bag"]:
-                    anomaly_map_structure = anomaly_map_ret
+                dino_patch_tokens_reshaped = dino_patch_tokens.view(-1, 1, 1536)
+                dino_normal_tokens_reshaped = self.normal_dino_patches.reshape(1, -1, 1536)
+                cosine_similarity_matrix = F.cosine_similarity(
+                    dino_patch_tokens_reshaped, dino_normal_tokens_reshaped, dim=2
+                )
+                sim_max_dino, _ = torch.max(cosine_similarity_matrix, dim=1)
+
+                anomaly_map_ret_dino = 1 - sim_max_dino
+                anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino
+
+
+                if self.class_name in ["breakfast_box", "pushpins"]:
+                    structure_score = anomaly_map_structure.topk(5)[0].mean().item()
                 else:
-                    dino_patch_tokens_reshaped = dino_patch_tokens.view(-1, 1, 1536)
-                    dino_normal_tokens_reshaped = self.normal_dino_patches.reshape(1, -1, 1536)
-                    cosine_similarity_matrix = F.cosine_similarity(
-                        dino_patch_tokens_reshaped, dino_normal_tokens_reshaped, dim=2
-                    )
-                    sim_max_dino, _ = torch.max(cosine_similarity_matrix, dim=1)
-
-                    anomaly_map_ret_dino = 1 - sim_max_dino
-                    anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino
-
-                structure_score = anomaly_map_structure.max().item()
+                    structure_score = anomaly_map_structure.max().item()
 
             image_save_path = f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}/image_0.jpg"
 
@@ -465,7 +524,6 @@ class Model(nn.Module):
                     image_to_save = F.interpolate(
                         single_image, size=(448, 448), mode="bilinear", align_corners=True
                     )
-                    # image_to_save = single_image
 
                     save_tensor_as_jpg(image_to_save, save_dir=f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}", class_name=self.class_name)
                     self.grounding_segmentation(
