@@ -2104,7 +2104,7 @@ def compute_logical_score(masks, class_name, image_idx):
         stand_red_wire_color = [38.5, 62, 184.5]
         
 
-        if abs(logical_features[1]['avg_color'][0] - logical_features[2]['avg_color'][0]) + abs(logical_features[1]['avg_color'][1] - logical_features[2]['avg_color'][1]) + abs(logical_features[1]['avg_color'][2] - logical_features[2]['avg_color'][2]) > 30:
+        if abs(logical_features[1]['avg_color'][0] - logical_features[2]['avg_color'][0]) + abs(logical_features[1]['avg_color'][1] - logical_features[2]['avg_color'][1]) + abs(logical_features[1]['avg_color'][2] - logical_features[2]['avg_color'][2]) > 40:
             logical_score += 1
         
 
