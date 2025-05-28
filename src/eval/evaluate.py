@@ -19,15 +19,17 @@ from torch.utils.data import DataLoader
 from torchvision.transforms.v2 import Resize
 from tqdm import tqdm
 
-from eval.submission.model import Model
-from eval.utils import auto_batch_size
+#from eval.submission.model import Model
+#from eval.utils import auto_batch_size
+from submission.model import Model
+from utils import auto_batch_size
 
 CATEGORIES = [
     "breakfast_box",
     "juice_bottle",
-    "pushpins",
-    "screw_bag",
-    "splicing_connectors",
+    #"pushpins",
+    #"screw_bag",
+    #"splicing_connectors",
 ]
 
 
@@ -164,7 +166,7 @@ def get_model(
 
     return model.to(DEVICE)
 
-@auto_batch_size(max_batch_size=128)
+@auto_batch_size(max_batch_size=1)
 def compute_kshot_metrics(
     dataset_path,
     category,
@@ -283,10 +285,11 @@ def evaluate_submission(
     # create dictso that we only compute batch size once per k_shot
     batch_size_dict = {k_shot: None for k_shot in k_shots}
 
+
     for category in tqdm(CATEGORIES, desc="Processing Categories"):
         # --- Per-Category Setup ---
         # Load model once per category
-        model = get_model(category)
+        model = get_model("category")
         for seed in tqdm(seeds, desc=f"Category {category} Seeds", leave=False):
             for k_shot in k_shots:  # No tqdm here, handled in compute_kshot_metrics
                 # Compute metrics for this specific seed/category/k-shot combination
