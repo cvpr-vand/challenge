@@ -2173,7 +2173,16 @@ def compute_logical_score(masks, class_name, image_idx):
                 logical_score += 1
 
     if class_name == "screw_bag":
-        pass
+        if logical_features[0]['area'] < 2050 or logical_features[0]['area'] > 2550:
+            logical_score += 1
+        if logical_features[3]['area'] < 2450 or logical_features[3]['area'] > 3150:
+            logical_score += 1
+
+        if logical_features[4]['avg_color'][0] < 128 or logical_features[4]['avg_color'][0] > 185.5 or logical_features[4]['avg_color'][1] < 125 or logical_features[4]['avg_color'][1] > 187 or logical_features[4]['avg_color'][2] < 116 or logical_features[4]['avg_color'][2] > 177:
+            logical_score += 1
+
+        if logical_features[5]['avg_color'][0] < 124 or logical_features[5]['avg_color'][0] > 185.5 or logical_features[5]['avg_color'][1] < 119 or logical_features[5]['avg_color'][1] > 194 or logical_features[5]['avg_color'][2] < 108 or logical_features[5]['avg_color'][2] > 191:
+            logical_score += 1
         if logical_features[4]["enclosing_circle_diameter"] > 200 and logical_features[5]["enclosing_circle_diameter"] > 200:
             logical_score += 1
         if logical_features[4]["enclosing_circle_diameter"] < 200 and logical_features[5]["enclosing_circle_diameter"] < 200:

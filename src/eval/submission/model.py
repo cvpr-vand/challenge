@@ -144,7 +144,7 @@ class Model(nn.Module):
                 )
 
         clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
-        self.image_size = 448
+        self.image_size = 518
         device = torch.device("cuda")
         self.out_layers = [6, 12, 18, 24]
 
@@ -290,70 +290,70 @@ class Model(nn.Module):
         self.class_name = setup_data.get("dataset_category")
         self.shot = len(few_shot_samples)
 
-        if self.class_name == "splicing_connectors" or self.class_name=="pushpins":
-            clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
-            self.image_size = 518
-            device = torch.device("cuda")
-            self.out_layers = [6, 12, 18, 24]
+        # if self.class_name == "splicing_connectors" or self.class_name=="pushpins":
+        #     clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
+        #     self.image_size = 518
+        #     device = torch.device("cuda")
+        #     self.out_layers = [6, 12, 18, 24]
 
-            self.clip_model, _, self.preprocess = open_clip.create_model_and_transforms(
-                clip_name, self.image_size
-            )
-            self.clip_model.to(device)
-            self.clip_model.eval()
+        #     self.clip_model, _, self.preprocess = open_clip.create_model_and_transforms(
+        #         clip_name, self.image_size
+        #     )
+        #     self.clip_model.to(device)
+        #     self.clip_model.eval()
 
-            self.transform_clip = v2.Compose(
-                [
-                    v2.Resize((self.image_size, self.image_size)),
-                    v2.Normalize(
-                        mean=(0.48145466, 0.4578275, 0.40821073),
-                        std=(0.26862954, 0.26130258, 0.27577711),
-                    ),
-                ],
-            )
+        #     self.transform_clip = v2.Compose(
+        #         [
+        #             v2.Resize((self.image_size, self.image_size)),
+        #             v2.Normalize(
+        #                 mean=(0.48145466, 0.4578275, 0.40821073),
+        #                 std=(0.26862954, 0.26130258, 0.27577711),
+        #             ),
+        #         ],
+        #     )
 
-            self.transform_dino = v2.Compose(
-                [
-                    v2.Resize((self.image_size, self.image_size)),
-                    v2.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
-                ],
-            )
+        #     self.transform_dino = v2.Compose(
+        #         [
+        #             v2.Resize((self.image_size, self.image_size)),
+        #             v2.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        #         ],
+        #     ) 
 
-            self.sampler = GreedyCoresetSampler(percentage= 0.2 / self.shot, device=self.device)
+        #     self.sampler = GreedyCoresetSampler(percentage= 0.2 / self.shot, device=self.device)
 
-        else:
-            clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
-            self.image_size = 448
-            device = torch.device("cuda")
-            self.out_layers = [6, 12, 18, 24]
+        # else:
+        #     clip_name = "hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
+        #     self.image_size = 448
+        #     device = torch.device("cuda")
+        #     self.out_layers = [6, 12, 18, 24]
 
-            self.clip_model, _, self.preprocess = open_clip.create_model_and_transforms(
-                clip_name, self.image_size
-            )
-            self.clip_model.to(device)
-            self.clip_model.eval()
+        #     self.clip_model, _, self.preprocess = open_clip.create_model_and_transforms(
+        #         clip_name, self.image_size
+        #     )
+        #     self.clip_model.to(device)
+        #     self.clip_model.eval()
 
-            self.transform_clip = v2.Compose(
-                [
-                    v2.Resize((self.image_size, self.image_size)),
-                    v2.Normalize(
-                        mean=(0.48145466, 0.4578275, 0.40821073),
-                        std=(0.26862954, 0.26130258, 0.27577711),
-                    ),
-                ],
-            )
+        #     self.transform_clip = v2.Compose(
+        #         [
+        #             v2.Resize((self.image_size, self.image_size)),
+        #             v2.Normalize(
+        #                 mean=(0.48145466, 0.4578275, 0.40821073),
+        #                 std=(0.26862954, 0.26130258, 0.27577711),
+        #             ),
+        #         ],
+        #     )
 
-            self.transform_dino = v2.Compose(
-                [
-                    v2.Resize((self.image_size, self.image_size)),
-                    v2.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
-                ],
-            )
+        #     self.transform_dino = v2.Compose(
+        #         [
+        #             v2.Resize((self.image_size, self.image_size)),
+        #             v2.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        #         ],
+        #     )
 
-            self.sampler = GreedyCoresetSampler(percentage= 0.4 / self.shot, device=self.device)
+        #     self.sampler = GreedyCoresetSampler(percentage= 0.4 / self.shot, device=self.device)
 
+        self.sampler = GreedyCoresetSampler(percentage= 0.2 / self.shot, device=self.device)
 
-        
         
         if self.class_name == "screw_bag":
             few_shot_samples = rotate(few_shot_samples, 3, interpolation=InterpolationMode.BILINEAR)
@@ -501,7 +501,7 @@ class Model(nn.Module):
                 anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino
 
 
-                if self.class_name in ["breakfast_box", "pushpins"]:
+                if self.class_name in ["breakfast_box"]:
                     structure_score = anomaly_map_structure.topk(5)[0].mean().item()
                 else:
                     structure_score = anomaly_map_structure.max().item()
