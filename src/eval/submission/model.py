@@ -45,6 +45,314 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 from eval.submission.gdino_sam2.interface import GSAM2Predictor
 import requests
 
+class ConnectorSplicingAnalyzer:
+    def __init__(self):
+        self.original_height = 850
+        self.original_width = 1700
+        self.target_height = 448
+        
+        # HSV color ranges
+        self.color_ranges = {
+            'red': (np.array([0, 200, 0]), np.array([255, 255, 255])),
+            'blue': (np.array([80, 90, 0]), np.array([150, 255, 255])),
+            'yellow': (np.array([12, 115, 0]), np.array([80, 255, 255])),
+            'green': (np.array([50, 20, 0]), np.array([98, 255, 255])),
+            'special_range': (np.array([10, 0, 194]), np.array([38, 12, 255])),
+            'blue_new': (np.array([75, 37, 0]), np.array([150, 255, 255]))
+        }
+        
+        # Area thresholds
+        self.area_thresholds = {
+            'min_contour': 500,
+            'large_hole': 20,
+            'large_saturation': 1000,
+            'red_small': (4000, 6000),
+            'red_medium': (6500, 8000),
+            'red_large': (28300, 32000),
+            'yellow_large': 8000,
+            'special_range': 20
+        }
+
+    def preprocess_image(self, raw_image):
+        """Convert and resize the input image"""
+        image = cv2.cvtColor(raw_image.astype(np.uint8), cv2.COLOR_RGB2BGR)
+        new_width = int(self.target_height * self.original_width / self.original_height)
+        return cv2.resize(image, (new_width, self.target_height), interpolation=cv2.INTER_CUBIC)
+
+    def get_bounding_box_dimensions(self, contour):
+        """Get length and width of minimum area rectangle"""
+        _, (width, height), _ = cv2.minAreaRect(contour)
+        return max(width, height), min(width, height)
+
+    def process_regions(self, mask, min_area=500):
+        """Find and analyze contours in a binary mask"""
+        kernel = np.ones((3, 3), np.uint8)
+        filled_mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        contours, _ = cv2.findContours(filled_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        regions = []
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area >= min_area:
+                M = cv2.moments(cnt)
+                if M["m00"] != 0:
+                    center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+                    regions.append({'contour': cnt, 'area': area, 'center': center})
+        return regions
+
+    def has_large_holes(self, mask, min_hole_area=20):
+        """Check if mask contains large holes"""
+        contours, hierarchy = cv2.findContours(mask.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+        if hierarchy is None:
+            return False
+            
+        for i, contour_info in enumerate(hierarchy[0]):
+            if contour_info[3] != -1:  # If has parent (is a hole)
+                if cv2.contourArea(contours[i]) >= min_hole_area:
+                    return True
+        return False
+
+    def get_region_thickness(self, mask, edge_margin=20):
+        """Calculate thickness variation of a region"""
+        if cv2.countNonZero(mask) < 500:
+            return None, None
+            
+        # PCA to find main direction
+        mean, eigenvectors = cv2.PCACompute(mask.astype(np.float32), mean=np.array([]))
+        angle = np.degrees(np.arctan2(eigenvectors[0][1], eigenvectors[0][0]))
+        
+        # Rotate to align with main axis
+        h, w = mask.shape
+        rot_mat = cv2.getRotationMatrix2D((w//2, h//2), -angle, 1)
+        rotated_mask = cv2.warpAffine(mask, rot_mat, (w, h))
+        
+        # Calculate thickness
+        coords = cv2.findNonZero(rotated_mask)
+        if coords is None:
+            return None, None
+            
+        x, _, width, _ = cv2.boundingRect(coords)
+        thickness_list = []
+        
+        for i in range(x + edge_margin, x + width - edge_margin):
+            col = rotated_mask[:, i]
+            indices = np.where(col > 0)[0]
+            if len(indices) >= 2:
+                thickness_list.append(indices[-1] - indices[0])
+                
+        return (max(thickness_list), min(thickness_list)) if thickness_list else (None, None)
+
+    def analyze_red_angle(self, red_mask):
+        """Analyze angle of red region difference"""
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+        opened = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel, iterations=10)
+        diff = cv2.subtract(red_mask, opened)
+        
+        diff_contours, _ = cv2.findContours(diff, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not diff_contours:
+            return 0
+            
+        largest_contour = max(diff_contours, key=cv2.contourArea)
+        angle = cv2.minAreaRect(largest_contour)[-1]
+        
+        # Normalize angle to 0-45 degrees
+        if angle < -45:
+            angle += 90
+        elif angle > 45:
+            angle -= 90
+        return abs(angle)
+
+    def check_yellow_position(self, red_regions, yellow_centers):
+        """Check position of yellow markers relative to red regions"""
+        if len(red_regions) != 2 or not yellow_centers:
+            return ""
+            
+        position_codes = []
+        for region in red_regions:
+            x, y, w, h = cv2.boundingRect(region['contour'])
+            rect_center_y = y + h / 2
+            found = False
+            
+            for (cy_x, cy_y) in yellow_centers:
+                if x <= cy_x <= x + w and y <= cy_y <= y + h:
+                    code = 0 if cy_y < rect_center_y else 1
+                    position_codes.append(code)
+                    found = True
+                    break
+                    
+            if not found:
+                position_codes.append(-1)
+                
+        if all(code in (0, 1) for code in position_codes):
+            return f"({position_codes[0]},{position_codes[1]})"
+        return ""
+
+    def check_blue_position(self, red_regions, blue_centers):
+        """Check position of blue markers relative to red regions"""
+        if len(red_regions) != 2 or not blue_centers:
+            return ""
+            
+        position_codes = []
+        for region in red_regions:
+            x, y, w, h = cv2.boundingRect(region['contour'])
+            step = h / 3
+            found = False
+            
+            for (bx, by) in blue_centers:
+                if x <= bx <= x + w and y <= by <= y + h:
+                    if by < y + step:
+                        code = 0
+                    elif by < y + 2 * step:
+                        code = 1
+                    else:
+                        code = 2
+                    position_codes.append(code)
+                    found = True
+                    break
+                    
+            if not found:
+                position_codes.append(-1)
+                
+        if all(code in (0, 1, 2) for code in position_codes):
+            return f"({position_codes[0]},{position_codes[1]})"
+        return ""
+
+    def analyze(self, raw_image):
+        """Main analysis function"""
+        image = self.preprocess_image(raw_image)
+        hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        
+        # Create masks for different colors
+        masks = {
+            'saturation': cv2.inRange(hsv_image[:, :, 1], 75, 255),
+            'special_range': cv2.inRange(hsv_image, *self.color_ranges['special_range']),
+            'red': cv2.inRange(hsv_image, *self.color_ranges['red']),
+            'blue': cv2.inRange(hsv_image, *self.color_ranges['blue']),
+            'yellow': cv2.inRange(hsv_image, *self.color_ranges['yellow']),
+            'green': cv2.inRange(hsv_image, *self.color_ranges['green']),
+            'blue_new': cv2.inRange(hsv_image, *self.color_ranges['blue_new'])
+        }
+        
+        # Process all regions
+        regions = {name: self.process_regions(mask) for name, mask in masks.items()}
+        
+        # Extract important metrics
+        metrics = {
+            'red_count': len(regions['red']),
+            'blue_count': len(regions['blue']),
+            'yellow_count': len(regions['yellow']),
+            'green_count': len(regions['green']),
+            'red_areas': [r['area'] for r in regions['red']],
+            'yellow_areas': [r['area'] for r in regions['yellow']],
+            'blue_widths': [self.get_bounding_box_dimensions(r['contour'])[1] for r in regions['blue']],
+            'yellow_widths': [self.get_bounding_box_dimensions(r['contour'])[1] for r in regions['yellow']],
+            'saturation_length': sum(self.get_bounding_box_dimensions(r['contour'])[0] for r in regions['saturation']),
+            'has_yellow_holes': self.has_large_holes(masks['yellow']),
+            'has_blue_holes': self.has_large_holes(masks['blue']),
+            'large_saturation_regions': len([r for r in regions['saturation'] if r['area'] > self.area_thresholds['large_saturation']]),
+            'special_range_exists': any(r['area'] > self.area_thresholds['special_range'] for r in regions['special_range'])
+        }
+        
+
+        rules = {
+            # Basic counting rules
+            'red_region_count': 'NG' if metrics['red_count'] >= 3 else 'OK',
+            'green_region_presence': 'NG' if metrics['green_count'] >= 1 else 'OK',
+            'two_red_no_yellow_no_blue': 'NG' if (metrics['red_count'] == 2 and 
+                                                metrics['yellow_count'] == 0 and 
+                                                metrics['blue_count'] == 0) else 'OK',
+            
+            # Hole detection rules
+            'yellow_holes': 'NG' if metrics['has_yellow_holes'] else 'OK',
+            'blue_holes': 'NG' if metrics['has_blue_holes'] else 'OK',
+            
+            # Saturation region rule
+            'large_saturation_regions': 'NG' if metrics['large_saturation_regions'] >= 2 else 'OK',
+            
+            # Width rules
+            'blue_width': 'NG' if any(w > 39.9 for w in metrics['blue_widths']) else 'OK',
+            'yellow_width': 'NG' if any(w > 39.9 for w in metrics['yellow_widths']) else 'OK',
+            
+            # Red angle analysis
+            'red_angle': 'NG' if (metrics['red_count'] == 1 and self.analyze_red_angle(cv2.drawContours(np.zeros_like(masks['red']), [regions['red'][0]['contour']], -1, 255, cv2.FILLED)) > 5.5) else 'OK',
+            
+            # Area-based rules
+            'red_small_area_no_yellow': 'NG' if any(
+                self.area_thresholds['red_small'][0] <= area <= self.area_thresholds['red_small'][1] 
+                for area in metrics['red_areas']) and metrics['yellow_count'] == 0 else 'OK',
+            
+            'red_medium_area_no_blue': 'NG' if any(
+                self.area_thresholds['red_medium'][0] <= area <= self.area_thresholds['red_medium'][1] 
+                for area in metrics['red_areas']) and metrics['blue_count'] == 0 else 'OK',
+            
+            'single_red_large_area': 'NG' if (metrics['red_count'] == 1 and 
+                                            (not (self.area_thresholds['red_large'][0] <= metrics['red_areas'][0] <= self.area_thresholds['red_large'][1]) or
+                                            not (metrics['yellow_count'] == 0 and metrics['blue_count'] == 0))) else 'OK',
+            
+            'saturation_length': 'NG' if metrics['saturation_length'] < 500 else 'OK',
+            
+            'two_red_area_difference': 'NG' if (metrics['red_count'] == 2 and 
+                                            abs(metrics['red_areas'][0] - metrics['red_areas'][1]) > 400) else 'OK',
+            
+            'duplicate_blue_or_yellow': 'NG' if metrics['blue_count'] == 2 or metrics['yellow_count'] == 2 else 'OK',
+            
+            'large_yellow_area': 'NG' if any(area > self.area_thresholds['yellow_large'] for area in metrics['yellow_areas']) else 'OK',
+            
+            'two_red_one_large': 'NG' if (metrics['red_count'] == 2 and 
+                                        any(area > 9000 for area in metrics['red_areas'])) else 'OK',
+            
+            # Special range rule
+            'special_range_presence': 'NG' if metrics['special_range_exists'] else 'OK'
+        }
+
+        # Marker position analysis (kept separate due to complexity)
+        yellow_position = blue_position = ""
+        if metrics['red_count'] == 2:
+            if metrics['yellow_count'] == 1:
+                yellow_position = self.check_yellow_position(
+                    regions['red'],
+                    [(int(M["m10"]/M["m00"]), int(M["m01"]/M["m00"])) 
+                    for cnt in cv2.findContours(masks['yellow'], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0] 
+                    if 100 <= cv2.contourArea(cnt) <= 500 
+                    and (M := cv2.moments(cnt))["m00"] != 0]
+                )
+            
+            if metrics['blue_count'] == 1:
+                blue_position = self.check_blue_position(
+                    regions['red'],
+                    [(int(M["m10"]/M["m00"]), int(M["m01"]/M["m00"])) 
+                    for cnt in cv2.findContours(masks['blue_new'], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0] 
+                    if 100 <= cv2.contourArea(cnt) <= 500 
+                    and (M := cv2.moments(cnt))["m00"] != 0]
+                )
+        
+        # Add position rules
+        rules.update({
+            'yellow_marker_position': yellow_position,
+            'yellow_position_mismatch': 'NG' if (yellow_position and 
+                                            len(yellow_position) >= 5 and 
+                                            (a := int(yellow_position[1])) != (b := int(yellow_position[3]))) else 'OK',
+            'blue_marker_position': blue_position,
+            'blue_position_mismatch': 'NG' if (blue_position and 
+                                            len(blue_position) >= 5 and 
+                                            (a := int(blue_position[1])) != (b := int(blue_position[3]))) else 'OK'
+        })
+
+        for color in ['blue', 'yellow']:
+            if regions[color]:
+                largest = max(regions[color], key=lambda x: x['area'])
+                largest_mask = np.zeros_like(masks[color])
+                cv2.drawContours(largest_mask, [largest['contour']], -1, 255, thickness=cv2.FILLED)
+                max_t, min_t = self.get_region_thickness(largest_mask)
+                if max_t is not None and min_t is not None:
+                    rules[f'{color}_thickness_variation'] = 'NG' if (max_t - min_t) > 9 else 'OK'
+
+        # Final overall result
+        rules['overall'] = 'NG' if any(v == 'NG' for v in rules.values()) else 'OK'
+        
+        return rules['overall'] == 'NG'
+    
+
 def to_np_img(m):
     m = m.permute(1, 2, 0).cpu().numpy()
     mean = np.array([[[0.48145466, 0.4578275, 0.40821073]]])
@@ -398,7 +706,119 @@ class Model(nn.Module):
                         print('grid {}: pushpin count ≠ 1'.format(i))
                         self.anomaly_flag = True
                         break
-                    
+            # add pins logic
+            if self.few_shot_inited and self.anomaly_flag is False:
+                a_th = 15
+                bianyuan_list = []
+                hull_fx_ok = True
+                extend_img = cv2.resize(raw_image[:, :, ::-1], (762, 448))
+                extend_hsv = cv2.cvtColor(extend_img, cv2.COLOR_BGR2HSV)
+                extend_v_channel = extend_hsv[:, :, 2]
+                kernel = np.ones((3, 3), np.uint8)
+
+
+                r_v1 = np.array([0, 210, 0])
+                r_u1 = np.array([14, 255, 255])
+                r_v2 = np.array([160, 100, 100])
+                r_u2 = np.array([179, 255, 255])
+                mask_r1 = cv2.inRange(extend_hsv, r_v1, r_u1)
+                mask_r2 = cv2.inRange(extend_hsv, r_v2, r_u2)
+                r_mask = cv2.bitwise_or(mask_r1, mask_r2)
+                r_mask = cv2.morphologyEx(r_mask, cv2.MORPH_CLOSE, kernel)
+
+                r_contours, _ = cv2.findContours(r_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                total_r_area = sum([cv2.contourArea(c) for c in r_contours])
+                if total_r_area > 12:
+                    self.anomaly_flag = True
+
+                color_y_v1 = np.array([15, 140, 0])
+                color_y_u1 = np.array([240, 240, 255])
+                color_y_v2 = np.array([35, 100, 100])
+                color_y_u2 = np.array([35, 255, 255])
+                mask_y1 = cv2.inRange(extend_hsv, color_y_v1, color_y_u1)
+                mask_y2 = cv2.inRange(extend_hsv, color_y_v2, color_y_u2)
+                y_mask = cv2.bitwise_or(mask_y1, mask_y2)
+                y_mask = cv2.morphologyEx(y_mask, cv2.MORPH_CLOSE, kernel)
+
+                channel0 = extend_img[:, :, 0]
+                mask0 = cv2.inRange(channel0, 0, 52)
+                mask0 = cv2.morphologyEx(mask0, cv2.MORPH_CLOSE, kernel)
+                contours, _ = cv2.findContours(mask0, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                area_filtered_count = 0
+                region_count = 0
+                for c in contours:
+                    if len(c) >= 3:
+                        hull = cv2.convexHull(c)
+                        hull_area = cv2.contourArea(hull)
+                        if 10000 <= hull_area <= 100000:
+                            area_filtered_count += 1
+                            hull_mask = np.zeros_like(mask0)
+                            cv2.fillPoly(hull_mask, [hull], 255)
+                            y_in_hull = cv2.bitwise_and(y_mask, hull_mask)
+                            y_cs_num, _ = cv2.findContours(y_in_hull, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                            angle_y_in_hull = None
+                            for c_y in y_cs_num:
+                                if cv2.contourArea(c_y) > 10:
+                                    rect_y = cv2.minAreaRect(c_y)
+                                    angle_y_in_hull = rect_y[2]
+                                    break
+                            duobianxin_mask = np.zeros_like(mask0)
+                            cv2.fillPoly(duobianxin_mask, [hull], 255)
+                            shrink_pixels = 5
+                            mask_neibu = cv2.erode(duobianxin_mask, kernel, iterations=shrink_pixels)
+
+                            zuobiaos = np.column_stack(np.where(mask_neibu > 0))
+                            if zuobiaos.shape[0] == 0:
+                                continue
+                            values_neibu = extend_v_channel[zuobiaos[:, 0], zuobiaos[:, 1]]
+                            if values_neibu.size == 0:
+                                continue
+
+                            innerse_m = (values_neibu >= 65) & (values_neibu <= 255)
+                            innerse_b= (values_neibu >= 190) & (values_neibu <= 255)
+
+                            full_shape = extend_v_channel.shape
+                            mask_full = np.zeros(full_shape, dtype=np.uint8)
+                            mask_ext = np.zeros(full_shape, dtype=np.uint8)
+
+                            for i, (y, x) in enumerate(zuobiaos):
+                                if innerse_b[i]:
+                                    mask_ext[y, x] = 255
+                                if innerse_m[i]:
+                                    mask_full[y, x] = 255
+
+                            waibu_m = cv2.dilate(mask_ext, np.ones((8, 8), np.uint8), iterations=2)
+                            cham = cv2.bitwise_and(mask_full, cv2.bitwise_not(waibu_m))
+                            lunkuo, _ = cv2.findContours(cham, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                            hfangxinag_n = False
+
+                            for lk in lunkuo:
+                                if cv2.contourArea(lk) > 1:
+                                    juxing = cv2.minAreaRect(lk)
+                                    (x0, y0), (w2, h2), jiaodu2 = juxing
+                                    max_edge = max(w2, h2)
+                                    if max_edge >= 6:
+                                        region_count += 1
+                                        if angle_y_in_hull is not None:
+                                            jiaodu1 = angle_y_in_hull
+                                            jiaodu2 = jiaodu2
+                                            a1 = jiaodu1 if jiaodu1 >= 0 else jiaodu1 + 90
+                                            a2 = jiaodu2 if jiaodu2 >= 0 else jiaodu2 + 90
+                                            minus_a = abs(a1 - a2)
+                                            if minus_a > a_th and abs(minus_a - 90) > a_th:
+                                                hfangxinag_n = True
+                                    bianyuan_list.append(max_edge)
+
+                            if angle_y_in_hull is not None and hfangxinag_n:
+                                hull_fx_ok = False
+
+                if bianyuan_list and min(bianyuan_list) < 0:
+                    self.anomaly_flag = True
+                if not hull_fx_ok:
+                    self.anomaly_flag = True
+
+                if region_count != 15:
+                    self.anomaly_flag = True                  
             # patch hist
             clip_patch_hist = np.bincount(patch_mask.reshape(-1), minlength=self.patch_query_obj.shape[0])
             clip_patch_hist = clip_patch_hist / np.linalg.norm(clip_patch_hist)
@@ -755,7 +1175,10 @@ class Model(nn.Module):
             
             if (component_count != 1 or connector_count != 2 or line_count != 1) and self.anomaly_flag is False:
                 self.anomaly_flag = True
-
+            # add splicing logic
+            if not self.anomaly_flag:
+                analyzer = ConnectorSplicingAnalyzer()
+                self.anomaly_flag = analyzer.analyze(raw_image)
             
             merge_sam[~(binary.astype(np.bool_))] = self.query_obj.shape[0] - 1  # remove noise
             patch_merge_sam[~(binary.astype(np.bool_))] = self.patch_query_obj.shape[0] - 1  # remove patch noise
@@ -1897,8 +2320,12 @@ class Model(nn.Module):
                                 if len(label_ids[1]) > 0:
                                     pred_classes = [ obj_names[i] for i in label_ids[1]]
                                     pred_classes = set(pred_classes)
-                                    # pred_classes = [ tag.split(" ")[0] for tag in pred_classes if " " in tag]
-                                    # print(pred_classes)
+                                    string_in_set = next(iter(pred_classes))  # 或者 s.pop()
+                                    if ' ' in string_in_set:
+                                        split_strings = string_in_set.split()  
+                                    else:
+                                        split_strings = [string_in_set]  
+                                    pred_classes = split_strings
                                     if detected_color == "red" and "cherry" not in pred_classes:
                                         # print(f"img_path {image_path} 红色液体异常: {detected_color} {pred_classes}")
                                         self.bottle_abnormal_flag = 1
@@ -1975,10 +2402,11 @@ class Model(nn.Module):
                 return  ImageBatch(
                     image = batch,
                     pred_score = torch.tensor( 
-                        10 * anomaly_map_ret_eva02.max().item() +  
-                        5 * dinov2_subcategory_mean_dists.max().item() +
-                        10 * eva02_anomaly_map_ret_part.max().item() +
-                        10 * eva02_subcategory_mean_dists.max().item() +
+                        5 * anomaly_map_ret_dinov2.max().item() +
+                        5 * anomaly_map_ret_eva02.max().item() +  
+                        # 5 * dinov2_subcategory_mean_dists.max().item() +
+                        # 10 * eva02_anomaly_map_ret_part.max().item() +
+                        # 10 * eva02_subcategory_mean_dists.max().item() +
                         5 * self.bottle_abnormal_flag
                         ).to(self.device)
                     )
