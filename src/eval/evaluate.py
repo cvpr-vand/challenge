@@ -23,10 +23,10 @@ from eval.submission.model import Model
 from eval.utils import auto_batch_size
 
 CATEGORIES = [
-    "breakfast_box",
-    "juice_bottle",
-    "pushpins",
-    "screw_bag",
+    #"breakfast_box",
+    #"juice_bottle",
+    #pushpins",
+    #"screw_bag",
     "splicing_connectors",
 ]
 
@@ -45,6 +45,7 @@ def parse_args() -> argparse.Namespace:
         "--seeds",
         type=int,
         nargs="*",
+        #default=[42],
         default=[42, 0, 1234],
         help="List of seed values for reproducibility. Default is [42, 0, 1234].",
     )
@@ -57,6 +58,7 @@ def parse_args() -> argparse.Namespace:
         "--k_shots",
         type=int,
         nargs="+",
+        #defaule=[4],
         default=[1, 2, 4, 8],
         help="List of integers for few-shot learning samples.",
     )
@@ -164,7 +166,7 @@ def get_model(
 
     return model.to(DEVICE)
 
-@auto_batch_size(max_batch_size=128)
+@auto_batch_size(max_batch_size=1)
 def compute_kshot_metrics(
     dataset_path,
     category,
@@ -196,8 +198,11 @@ def compute_kshot_metrics(
 
     # Pass few-shot images and dataset category to model's setup method
     few_shot_images = torch.stack([cast(ImageBatch, train_dataset[idx]).image for idx in k_shot_idxs]).to(DEVICE)
+    few_shot_samples_path = [(train_dataset[idx]).image_path for idx in k_shot_idxs]
+    print("path:", few_shot_samples_path)
     setup_data = {
         "few_shot_samples": few_shot_images,
+        "few_shot_samples_path": few_shot_samples_path,
         "dataset_category": train_dataset.category,
     }
     model.setup(setup_data)
@@ -206,7 +211,7 @@ def compute_kshot_metrics(
     model.eval()  # Ensure model is in eval mode
     with torch.no_grad():  # Disable gradient calculations for inference
         for data in tqdm(test_dataloader, desc=f"k={k_shot} Inference", leave=False):
-            output = model(data.image.to(DEVICE))
+            output = model(data.image.to(DEVICE),data.image_path)
             image_metric.update(output.pred_score, data.gt_label.to(DEVICE))
 
     # Compute final metrics
@@ -282,7 +287,6 @@ def evaluate_submission(
 
     # create dictso that we only compute batch size once per k_shot
     batch_size_dict = {k_shot: None for k_shot in k_shots}
-
     for category in tqdm(CATEGORIES, desc="Processing Categories"):
         # --- Per-Category Setup ---
         # Load model once per category
