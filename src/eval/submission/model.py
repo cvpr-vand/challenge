@@ -17,6 +17,7 @@ import subprocess
 
 from .utils.sampler import GreedyCoresetSampler
 from .models import clip as open_clip
+from .models.clip_prompt import encode_text_with_prompt_ensemble
 import os
 from torchvision.transforms.v2.functional import resize, crop, rotate, InterpolationMode
 
@@ -60,7 +61,18 @@ class LinearLayer(nn.Module):
                 assert 0 == 1
         return tokens
 
+all_obj_list = [
+    "breakfast_box",
+    "juice_bottle",
+    "pushpins",
+    "screw_bag",
+    "splicing_connectors",
+]
 
+
+import torchvision
+
+gaussion_filter = torchvision.transforms.GaussianBlur(3, 4.0)
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -189,6 +201,11 @@ class Model(nn.Module):
         self.grounding_processor = AutoProcessor.from_pretrained(grounding_model_id)
         self.grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(grounding_model_id).to(self.device)
 
+
+        with torch.no_grad():
+            self.text_prompts = encode_text_with_prompt_ensemble(
+                self.clip_model, all_obj_list, self.tokenizer, self.device
+            )
 
 
     def grounding_segmentation(self, image_path, mask_path, grounding_config):
@@ -495,8 +512,30 @@ class Model(nn.Module):
                 )
                 sim_max_dino, _ = torch.max(cosine_similarity_matrix, dim=1)
 
+                text_features = self.text_prompts[self.class_name]
+                anomaly_map_vls = []
+                for layer in range(len(patch_tokens)):
+                    if layer != 6:  # layer%2!=0:# (layer+1)//2!=0:
+                        continue
+                    patch_tokens[layer] = patch_tokens[layer] @ self.clip_model.visual.proj
+                    patch_tokens[layer] = patch_tokens[layer] / patch_tokens[layer].norm(
+                        dim=-1, keepdim=True
+                    )
+                    anomaly_map_vl = 100.0 * patch_tokens[layer] @ text_features
+                    B, L, C = anomaly_map_vl.shape
+                    H = int(np.sqrt(L))
+                    anomaly_map_vl = anomaly_map_vl.permute(0, 2, 1).view(B, 2, H, H)
+                    anomaly_map_vl = torch.softmax(anomaly_map_vl, dim=1)
+                    anomaly_map_vl = gaussion_filter(
+                        (anomaly_map_vl[:, 1, :, :] - anomaly_map_vl[:, 0, :, :] + 1) / 2
+                    ).reshape(-1)
+                    anomaly_map_vls.append(anomaly_map_vl)
+                anomaly_map_vls = torch.mean(
+                    torch.stack(anomaly_map_vls, dim=0), dim=0
+                ).unsqueeze(1)
+
                 anomaly_map_ret_dino = 1 - sim_max_dino
-                anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino
+                anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino + anomaly_map_vls
                 structure_score_clip = anomaly_map_ret.max().item()
 
                 if self.class_name in ["breakfast_box", "pushpins"]:
