@@ -535,7 +535,7 @@ class Model(nn.Module):
                 ).unsqueeze(1)
 
                 anomaly_map_ret_dino = 1 - sim_max_dino
-                if self.class_name == "screw_bag":
+                if self.class_name in ["screw_bag", "juice_bottle"]:
                     anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino + anomaly_map_vls
                 else:
                     anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino
