@@ -352,12 +352,12 @@ class Model(nn.Module):
 
         #     self.sampler = GreedyCoresetSampler(percentage= 0.4 / self.shot, device=self.device)
 
-        self.sampler = GreedyCoresetSampler(percentage= 0.16 / self.shot, device=self.device)
+        self.sampler = GreedyCoresetSampler(percentage= 0.20 / self.shot, device=self.device)
 
         
-        if self.class_name == "screw_bag":
-            few_shot_samples = rotate(few_shot_samples, 3, interpolation=InterpolationMode.BILINEAR)
-            few_shot_samples = crop(few_shot_samples, 35, 23, 180, 175)
+        # if self.class_name == "screw_bag":
+        #     few_shot_samples = rotate(few_shot_samples, 3, interpolation=InterpolationMode.BILINEAR)
+        #     few_shot_samples = crop(few_shot_samples, 35, 23, 180, 175)
 
         self.grounding_config = {}
         self.grounding_config['background_prompt'] = ""
@@ -455,8 +455,8 @@ class Model(nn.Module):
             single_image = image[batch_idx:batch_idx+1]
 
             if self.class_name == "screw_bag":
-                single_image = rotate(single_image, 3, interpolation=InterpolationMode.BILINEAR)
-                single_image = crop(single_image, 35, 23, 180, 175)
+                single_image_to_save = rotate(single_image, 3, interpolation=InterpolationMode.BILINEAR)
+                single_image_to_save = crop(single_image_to_save, 35, 23, 180, 175)
 
             clip_transformed_image = self.transform_clip(single_image)
             dino_transformed_image = self.transform_dino(single_image)
@@ -520,7 +520,7 @@ class Model(nn.Module):
 
                 elif self.class_name == "screw_bag":
                     image_to_save = F.interpolate(
-                        single_image, size=(448, 448), mode="bilinear", align_corners=True
+                        single_image_to_save, size=(448, 448), mode="bilinear", align_corners=True
                     )
 
                     save_tensor_as_jpg(image_to_save, save_dir=f"src/eval/submission/test_images/{self.class_name}/{str(self.image_idx)}", class_name=self.class_name)
