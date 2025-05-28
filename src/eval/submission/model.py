@@ -535,7 +535,10 @@ class Model(nn.Module):
                 ).unsqueeze(1)
 
                 anomaly_map_ret_dino = 1 - sim_max_dino
-                anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino + anomaly_map_vls
+                if self.class_name == "screw_bag":
+                    anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino + anomaly_map_vls
+                else:
+                    anomaly_map_structure = anomaly_map_ret + anomaly_map_ret_dino
                 structure_score_clip = anomaly_map_ret.max().item()
 
                 if self.class_name in ["breakfast_box", "pushpins"]:
