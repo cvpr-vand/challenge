@@ -406,16 +406,16 @@ class Model(nn.Module):
                         threshold_info = self.threshold_stats[score_name]
                     threshold = threshold_info['threshold']
                     # 对污染使用您在inspector中定义的固定像素阈值
-                    if score_name == 'contamination_score':
-                        if score_value > inspector.CONTAMINATION_PIXEL_THRESHOLD:
-                            self.anomaly_flag = True
-                            reasons.append(f"{score_name} | 计数值:{score_value} > 阈值:{inspector.CONTAMINATION_PIXEL_THRESHOLD}")
+                    # if score_name == 'contamination_score':
+                    #     if score_value > inspector.CONTAMINATION_PIXEL_THRESHOLD:
+                    #         self.anomaly_flag = True
+                    #         reasons.append(f"{score_name} | 计数值:{score_value} > 阈值:{inspector.CONTAMINATION_PIXEL_THRESHOLD}")
                     # 其他分数都是值越大越异常
                     # elif score_name == 'head_shape_score':
                     #     if score_value > threshold:
                     #         self.anomaly_flag = True
                     #         reasons.append(f"{score_name} | 值:{score_value:.4f} > 阈值:{threshold:.4f}")
-                    elif score_name == 'head_area_score':
+                    if score_name == 'head_area_score':
                         if score_value > threshold:
                             self.anomaly_flag = True
                             reasons.append(f"{score_name} | 值:{score_value:.4f} > 阈值:{threshold:.4f}")

@@ -20,6 +20,74 @@ from matplotlib import pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
 import pickle
+from ultralytics import FastSAM
+
+from skimage.feature import local_binary_pattern, graycomatrix, graycoprops
+from scipy.spatial.distance import mahalanobis
+
+class FastSAMSegmenterFormatted:
+    def __init__(self, device='cuda'):
+        self.device = device
+        try:
+            self.model_fastsam = FastSAM('FastSAM-x.pt') # 或 'fastsam-s.pt'
+            # model_fastsam 本身会自动移到可用设备，但可以明确指定
+            # self.model_fastsam.to(self.device) # ultralytics 模型通常在推理时处理设备
+            # print("Successfully loaded FastSAM model.")
+        except Exception as e:
+            print(f"下载或加载 FastSAM 权重失败: {e}")
+            self.model_fastsam = None
+
+    def generate_masks_formatted(self, raw_image_np_rgb, class_name):
+        if self.model_fastsam is None:
+            print("FastSAM model not loaded.")
+            return []
+
+        height, width = raw_image_np_rgb.shape[:2]
+        
+        if class_name == 'pushpins':
+            results = self.model_fastsam(raw_image_np_rgb,
+                                     device=self.device,
+                                     retina_masks=True,
+                                     imgsz=2048,#height, # 使用原始高度，或自定义
+                                     conf=0.25,
+                                     iou=0.7,
+                                     verbose=False)
+        else:
+            results = self.model_fastsam(raw_image_np_rgb,
+                                     device=self.device,
+                                     retina_masks=True,
+                                     imgsz=height, # 使用原始高度，或自定义
+                                     conf=0.25,
+                                     iou=0.7,
+                                     verbose=False)
+        
+        formatted_masks = []
+        if results and results[0].masks is not None:
+            masks_tensor = results[0].masks.data.cpu().numpy() # (N, H, W)
+            # xyxyn 是归一化的 [x1, y1, x2, y2]
+            # xywhn 是归一化的 [x_center, y_center, width, height]
+            # xyxy 是绝对像素的 [x1, y1, x2, y2]
+            # xywh 是绝对像素的 [x_center, y_center, width, height]
+            boxes_xyxy = results[0].boxes.xyxy.cpu().numpy() # (N, 4)
+            confs = results[0].boxes.conf.cpu().numpy()    # (N,)
+
+            for i in range(masks_tensor.shape[0]):
+                mask_np = masks_tensor[i].astype(bool)
+                area = int(mask_np.sum())
+                
+                x1, y1, x2, y2 = boxes_xyxy[i]
+                bbox = [int(x1), int(y1), int(x2 - x1), int(y2 - y1)] # x, y, w, h
+
+                formatted_masks.append({
+                    'segmentation': mask_np,
+                    'area': area,
+                    'bbox': bbox,
+                    'predicted_iou': float(confs[i]), # 使用置信度作为 predicted_iou
+                    'point_coords': [[(bbox[0] + bbox[2] // 2), (bbox[1] + bbox[3] // 2)]], # 使用 bbox 中心作为示例点
+                    'stability_score': float(confs[i]), # 使用置信度作为 stability_score 的近似值
+                    'crop_box': [0, 0, width, height] # FastSAM (ultralytics) 通常在全图操作
+                })
+        return formatted_masks
 
 def to_np_img(m):
     m = m.permute(1, 2, 0).cpu().numpy()
@@ -52,29 +120,53 @@ class Model(nn.Module):
             ],
         )
        
-        self.model_clip, _, _ = open_clip.create_model_and_transforms(
-            model_name="ViT-L-14",
-            pretrained="/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
-        )
-        self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
-        # self.model_clip, _, _ = open_clip.create_model_and_transforms('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
-        # self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
+        # self.model_clip, _, _ = open_clip.create_model_and_transforms(
+        #     model_name="ViT-L-14",
+        #     pretrained="/home/dancer/LogSAD/clip_vitl14_model/open_clip_pytorch_model.bin"
+        # )
+        # self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
+        self.model_clip, _, _ = open_clip.create_model_and_transforms('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
+        self.tokenizer = open_clip.get_tokenizer('hf-hub:laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K')
 
 
         self.feature_list = [6, 12, 18, 24]
         self.embed_dim = 768
         self.vision_width = 1024
 
-        checkpoint_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth" 
-        self.model_sam = sam_model_registry["vit_h"]()
+        # --- 策略3：使用更小的SAM模型 ---
+        SAM_MODEL_TYPE = "vit_h" #  "vit_h"、"vit_b"
+        SAM_CHECKPOINT_URL_BASE = "https://dl.fbaipublicfiles.com/segment_anything/"
+        SAM_CHECKPOINTS = {
+            "vit_h": "sam_vit_h_4b8939.pth",
+            "vit_l": "sam_vit_l_0b3195.pth",
+            "vit_b": "sam_vit_b_01ec64.pth",
+        }
+        checkpoint_url = SAM_CHECKPOINT_URL_BASE + SAM_CHECKPOINTS[SAM_MODEL_TYPE]
+        self.model_sam = sam_model_registry[SAM_MODEL_TYPE]()
         try:
-            state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, progress=True)
+            state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, progress=True, map_location=self.device)
             self.model_sam.load_state_dict(state_dict)
+            # print(f"Successfully loaded SAM model: {SAM_MODEL_TYPE}")
         except Exception as e:
-            print(f"下载或加载权重失败: {e}")
-            print("请检查网络连接或URL是否正确。")
-        self.model_sam.to(self.device)
-        self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
+            print(f"下载或加载 SAM ({SAM_MODEL_TYPE}) 权重失败: {e}")
+            print("请检查网络连接、URL或本地权重路径是否正确。")
+        self.model_sam.to(self.device).eval()
+        # self.mask_generator = SamAutomaticMaskGenerator(model = self.model_sam)
+        # --- 策略2：调整SamAutomaticMaskGenerator参数 ---
+        self.mask_generator = SamAutomaticMaskGenerator(
+            model=self.model_sam,
+            points_per_side=16,  # 默认 32。减少采样点数，显著加快速度。可以尝试 16, 8。
+            # pred_iou_thresh=0.88, # 默认。略微提高 (如 0.9) 可以减少低质量掩码。
+            # stability_score_thresh=0.95, # 默认。略微提高 (如 0.97) 可以减少不稳定掩码。
+            # box_nms_thresh=0.7, # 默认。
+            # min_mask_region_area=100,  # 默认 0。设置一个合理的最小面积（例如根据您的目标对象大小）可以过滤掉很多小噪声掩码。
+            # points_per_batch=64, # 默认。如果显存足够，可以尝试增大；如果显存不足，可以减小。对总时间影响可能不大。
+            # crop_n_layers=0, # 默认。 设为0表示不使用裁剪预测，可能会更快。
+            # crop_n_points_downscale_factor=1 # 默认。
+        )
+
+        # 替换为fastsam
+        self.segmenter = FastSAMSegmenterFormatted(device=self.device)
 
         self.memory_size = 2048
         self.n_neighbors = 2
@@ -132,6 +224,9 @@ class Model(nn.Module):
         self.visualization = False
 
         self.pushpins_count = 15
+        self.mem_traditional_features = None
+        self.mem_traditional_stats = {} # 存储均值和协方差逆矩阵
+        self.traditional_feature_dim = None
 
         self.splicing_connectors_count = [2, 3, 5] # coresponding to yellow, blue, and red
         self.splicing_connectors_distance = 0
@@ -161,7 +256,12 @@ class Model(nn.Module):
             raise FileNotFoundError(f"Required model statistics file is missing: {pkl_path}")
         with open(pkl_path, "rb") as f:
             self.stats = pickle.load(f)
-
+        pkl_path_tradional = os.path.join(current_dir, "memory_bank", "statistic_scores_with_traditional.pkl")
+        if not os.path.exists(pkl_path_tradional):
+            raise FileNotFoundError(f"Required model statistics file is missing: {pkl_path_tradional}")
+        with open(pkl_path_tradional, "rb") as f:
+            self.traditional_stats = pickle.load(f)
+            
         self.mem_instance_masks = None
 
         self.anomaly_flag = False
@@ -245,6 +345,16 @@ class Model(nn.Module):
             hist_score = results['hist_score']
             structural_score = results['structural_score']
             instance_hungarian_match_score = results['instance_hungarian_match_score']
+            if self.class_name == 'pushpins':
+                traditional_anomaly_score = results['traditional_anomaly_score'] # 获取新分数
+                stats_trad = self.traditional_stats[self.class_name]["traditional_anomaly_scores"]
+                mean_trad = stats_trad["mean"]
+                std_trad = stats_trad["unbiased_std"]
+                # 增加一个保护，防止标准差为0
+                if std_trad > 1e-6:
+                    standard_traditional_score = (traditional_anomaly_score - mean_trad) / std_trad
+                else: # 如果标准差为0，只做中心化
+                    standard_traditional_score = traditional_anomaly_score - mean_trad
 
             # standardization
             standard_structural_score = (
@@ -254,7 +364,10 @@ class Model(nn.Module):
                 instance_hungarian_match_score - self.stats[self.class_name]["instance_hungarian_match_scores"]["mean"]
             ) / self.stats[self.class_name]["instance_hungarian_match_scores"]["unbiased_std"]
 
-            pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
+            if self.class_name == 'pushpins':
+                pred_score = max(standard_instance_hungarian_match_score, standard_structural_score, standard_traditional_score)
+            else:
+                pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
             pred_score = sigmoid(pred_score)
 
             if self.anomaly_flag:
@@ -279,7 +392,12 @@ class Model(nn.Module):
     #         ImageBatch: The output image batch.
     #     """
     #     # TODO: Implement the forward pass of the model.
+    #     # Ensure 4D input: [B, 3, H, W]
+    #     if image.ndim == 3:  # single image, [3, H, W]
+    #         image = image.unsqueeze(0)
     #     batch_size = image.shape[0]
+    #     if batch_size > 1:
+    #         raise RuntimeError("out of memory")
 
     #     self.anomaly_flag = False
     #     batch = image.clone().detach().to(self.device)
@@ -391,6 +509,46 @@ class Model(nn.Module):
 
                 anomaly_maps_patchcore.append(anomaly_map_patchcore)
 
+        # --- 新增：计算传统特征异常分数 ---
+        traditional_anomaly_score = 0.0 # 默认为正常
+        if self.class_name == 'pushpins' and 'binary_foreground' in results and self.mem_traditional_features is not None:
+            np_image = to_np_img(batch[0])
+            foreground_mask = results['binary_foreground']
+            debug_dir = "debug_images"
+            os.makedirs(debug_dir, exist_ok=True)
+            debug_image_name = os.path.join(debug_dir, "debug_masks.png")
+            # 将掩码从 0/1 变为 0/255 的灰度图
+            cv2.imwrite(debug_image_name, foreground_mask * 255)
+            
+            # 1. 为测试样本提取传统特征
+            test_features = self.extract_traditional_features(np_image, foreground_mask)
+            if test_features is None:
+                test_features = np.zeros(self.traditional_feature_dim)
+            
+            # 2. 计算马氏距离
+            # 如果特征维度不匹配（例如测试时未检测到物体），给一个最大的惩罚分数
+            if test_features.shape[0] != self.mem_traditional_stats['mean'].shape[0]:
+                traditional_anomaly_score = 10.0 # 一个比较大的值
+            else:
+                try:
+                    # 使用存储的均值和逆协方差矩阵
+                    mean_ff = self.mem_traditional_stats['mean']
+                    # 【核心修改】根据是否存在 'cov_inv' 来选择距离度量
+                    if 'cov_inv' in self.mem_traditional_stats:
+                        # k > 1 的情况：使用马氏距离
+                        cov_inv_ff = self.mem_traditional_stats['cov_inv']
+                        traditional_anomaly_score = mahalanobis(test_features, mean_ff, cov_inv_ff)
+                    else:
+                        # k = 1 的情况：降级为使用余弦距离或欧氏距离
+                        # 选项 A: 余弦距离 (推荐)
+                        similarity = (test_features @ mean_ff) / (np.linalg.norm(test_features) * np.linalg.norm(mean_ff) + 1e-6)
+                        traditional_anomaly_score = 1.0 - similarity
+                        # 选项 B: 欧氏距离
+                        # traditional_anomaly_score = np.linalg.norm(test_features - mean_ff)
+                except Exception as e:
+                    print(f"Error calculating Mahalanobis distance: {e}")
+                    traditional_anomaly_score = 10.0
+
         structural_score = np.stack(anomaly_maps_patchcore).mean(0).max()
         anomaly_map_structural = np.stack(anomaly_maps_patchcore).mean(0).reshape(self.feat_size, self.feat_size)
 
@@ -418,7 +576,10 @@ class Model(nn.Module):
 
             instance_hungarian_match_score = np.mean(anomaly_instances_hungarian)     
 
-        results = {'hist_score': hist_score, 'structural_score': structural_score,  'instance_hungarian_match_score': instance_hungarian_match_score, "anomaly_map_structural": anomaly_map_structural}
+        if self.class_name == 'pushpins':
+            results = {'hist_score': hist_score, 'structural_score': structural_score, 'traditional_anomaly_score': traditional_anomaly_score, 'instance_hungarian_match_score': instance_hungarian_match_score, "anomaly_map_structural": anomaly_map_structural}
+        else:
+            results = {'hist_score': hist_score, 'structural_score': structural_score,  'instance_hungarian_match_score': instance_hungarian_match_score, "anomaly_map_structural": anomaly_map_structural}
 
         return results
 
@@ -478,8 +639,67 @@ class Model(nn.Module):
 
         raw_image = to_np_img(image[0])
         height, width = raw_image.shape[:2]
-        masks = self.mask_generator.generate(raw_image)
+        if self.class_name == 'splicing_connectors':
+            masks = self.mask_generator.generate(raw_image)
+        else:
+            masks = self.segmenter.generate_masks_formatted(raw_image, self.class_name)
         # self.predictor.set_image(raw_image)
+
+        no_pushpins_detected = False
+        if self.class_name == 'pushpins':
+            # 默认假设检测到了图钉
+            filtered_masks = []
+            # 保留面积最大的第一个掩码（作为背景）
+            # background_mask_info = sorted_masks[0]
+            # filtered_masks.append(background_mask_info)
+            # 遍历其余的掩码（从第二个元素开始）
+            # --- 定义禁区 ---
+            # 1. 顶部中间区域
+            top_forbidden_zone = {
+                "x_min": width * 0.4,
+                "x_max": width * 0.6,
+                "y_min": 0,
+                "y_max": height * 0.1 
+            }
+            # 2. 左侧中间区域
+            left_forbidden_zone = {
+                "x_min": 0,
+                "x_max": width * 0.05,
+                "y_min": height * 0.48,
+                "y_max": height * 0.56
+            }
+            forbidden_zones = [top_forbidden_zone, left_forbidden_zone]
+            for mask_info in masks[0:]:
+                # 只保留面积小于或等于 1000 的掩码
+                if mask_info['area'] > 1000 or mask_info['area'] < 32:
+                    continue 
+                # --- 条件2: 宽高比筛选 ---
+                bbox = mask_info['bbox']
+                x, y, w, h = bbox
+                # 计算长边与短边的比例
+                aspect_ratio = max(w / h, h / w)
+                # 如果宽高比过于极端，则跳过
+                if aspect_ratio > 8.0:
+                    continue # 跳过这个掩码
+                # --- 位置筛选逻辑 ---
+                is_in_forbidden_zone = False
+                # 计算 bbox 的中心点
+                center_x = x + w / 2
+                center_y = y + h / 2
+                for zone in forbidden_zones:
+                    if (zone["x_min"] < center_x < zone["x_max"] and
+                        zone["y_min"] < center_y < zone["y_max"]):
+                        is_in_forbidden_zone = True
+                        # print(f"剔除位于禁区的掩码: bbox={bbox}")
+                        break # 一旦落入一个禁区，就无需再检查其他禁区
+                if is_in_forbidden_zone:
+                    continue # 跳过这个掩码
+                # --- 如果所有条件都通过，则保留该掩码 ---
+                filtered_masks.append(mask_info)
+
+            if len(filtered_masks) == 0:
+                no_pushpins_detected = True
+            masks = filtered_masks
         
         kmeans_label = pseudo_labels.view(self.feat_size, self.feat_size).cpu().numpy()
         kmeans_mask = kmeans_mask.view(self.feat_size, self.feat_size).cpu().numpy()
@@ -489,10 +709,15 @@ class Model(nn.Module):
         patch_mask = patch_mask.view(self.feat_size, self.feat_size).cpu().numpy()
 
         sorted_masks = sorted(masks, key=(lambda x: x['area']), reverse=True)
-        sam_mask = plot_results_only(sorted_masks).astype(int)
+        # sam_mask = plot_results_only(sorted_masks).astype(int)
+        if no_pushpins_detected:
+            sam_mask = np.zeros((height, width), dtype=np.int32)
+        else:
+            sam_mask = plot_results_only(sorted_masks).astype(int)
         
         resized_mask = cv2.resize(kmeans_mask, (width, height), interpolation = cv2.INTER_NEAREST)
         merge_sam = merge_segmentations(sam_mask, resized_mask, background_class=self.classes-1)
+        merge_sam_noclip = np.where(sam_mask == 0, 1, 0)
 
         resized_patch_mask = cv2.resize(patch_mask, (width, height), interpolation = cv2.INTER_NEAREST)
         patch_merge_sam = merge_segmentations(sam_mask, resized_patch_mask, background_class=self.patch_query_obj.shape[0]-1)
@@ -504,6 +729,14 @@ class Model(nn.Module):
             temp_mask = labels == i
             if np.sum(temp_mask) <= 32: # 448x448 
                 merge_sam[temp_mask] = self.classes - 1 # set to background
+
+        # filter small region for merge sam no clip
+        binary_noclip = np.isin(merge_sam_noclip, self.foreground_label_idx[self.class_name]).astype(np.uint8)  # foreground 1  background 0
+        num_labels_noclip, labels_noclip, stats_noclip, centroids_noclip = cv2.connectedComponentsWithStats(binary_noclip, connectivity=8)
+        for i in range(1, num_labels_noclip):
+            temp_mask_noclip = labels_noclip == i
+            if np.sum(temp_mask_noclip) <= 200: # 448x448 
+                merge_sam_noclip[temp_mask_noclip] = self.classes - 1 # set to background
 
         # filter small region for patch merge sam
         binary = (patch_merge_sam != (self.patch_query_obj.shape[0]-1) ).astype(np.uint8)  # foreground 1  background 0
@@ -521,8 +754,12 @@ class Model(nn.Module):
             kernel = np.ones((3, 3), dtype=np.uint8)  # dilate for robustness  
             binary = np.isin(merge_sam, self.foreground_label_idx[self.class_name]).astype(np.uint8) # foreground 1  background 0
             dilate_binary = cv2.dilate(binary, kernel)
+            binary_noclip = np.isin(merge_sam_noclip, self.foreground_label_idx[self.class_name]).astype(np.uint8) # foreground 1  background 0
+            dilate_binary_noclip = cv2.dilate(binary_noclip, kernel)
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilate_binary, connectivity=8)
             pushpins_count = num_labels - 1 # number of pushpins
+            if no_pushpins_detected:
+                pushpins_count = 0
 
             for i in range(1, num_labels):
                 instance_mask = (labels == i).astype(np.uint8)
@@ -534,6 +771,29 @@ class Model(nn.Module):
                 self.anomaly_flag = True
                 print('number of pushpins: {}, but canonical number of pushpins: {}'.format(pushpins_count, self.pushpins_count))
             
+            # ✅ 新增逻辑：图钉数量匹配但要检查每个格子最多一个图钉
+            if pushpins_count == self.pushpins_count and self.anomaly_flag is False:
+                # 图钉中心点列表
+                pushpin_centers = centroids[1:]  # 去掉背景，第0个是背景
+                # 15个格子 bbox 坐标
+                grid_boxes = [
+                    (186, 42, 77, 121),(0, 37, 95, 125),(0, 169, 95, 120),(0, 300, 95, 124),(185, 169, 77, 119),(354, 300, 93, 121),(353, 170, 74, 119),
+                    (267, 302, 76, 117),(354, 38, 93, 124),(103, 170, 77, 118),(103, 38, 77, 124),(269, 171, 73, 117),(268, 37, 75, 125),(103, 300, 76, 117),
+                    (186, 300, 76, 117)]
+                # 统计每个格子里的图钉数量
+                from collections import defaultdict
+                grid_pushpin_counts = defaultdict(int)
+                for (cx, cy) in pushpin_centers:
+                    for i, (x, y, w, h) in enumerate(grid_boxes):
+                        if x <= cx < x + w and y <= cy < y + h:
+                            grid_pushpin_counts[i] += 1
+                            break
+                # 检查是否有格子包含多个图钉
+                multiple_in_one_grid = [i for i, count in grid_pushpin_counts.items() if count > 1]
+                if multiple_in_one_grid:
+                    self.anomaly_flag = True
+                    print("异常：以下格子含有多个图钉：", multiple_in_one_grid)
+
             # patch hist 
             clip_patch_hist = np.bincount(patch_mask.reshape(-1), minlength=self.patch_query_obj.shape[0])
             clip_patch_hist = clip_patch_hist / np.linalg.norm(clip_patch_hist)
@@ -542,7 +802,8 @@ class Model(nn.Module):
                 patch_hist_similarity = (clip_patch_hist @ self.patch_token_hist.T)
                 score = 1 - patch_hist_similarity.max()
 
-            binary_foreground = dilate_binary.astype(np.uint8) 
+            # binary_foreground = dilate_binary.astype(np.uint8) 
+            binary_foreground = dilate_binary_noclip.astype(np.uint8)
 
             if len(instance_masks) != 0:
                 instance_masks = np.stack(instance_masks) #[N, 64x64]
@@ -559,10 +820,13 @@ class Model(nn.Module):
                 plt.show()
 
             # todo: same number in total but in different boxes or broken box
-            return {"score": score, "clip_patch_hist": clip_patch_hist, "instance_masks": instance_masks}
+            return {"score": score, "clip_patch_hist": clip_patch_hist, "instance_masks": instance_masks, "binary_foreground": binary_foreground}
         
         elif self.class_name == 'splicing_connectors':
             #  object count hist for default
+            # # --- 策略1：降低SAM输入分辨率 ---
+            # largest_mask_high_res_bool = (sam_mask == 1)
+            # sam_mask_max_area = largest_mask_high_res_bool # background
             sam_mask_max_area = sorted_masks[0]['segmentation'] # background
             binary = (sam_mask_max_area == 0).astype(np.uint8) # sam_mask_max_area is background,  background 0 foreground 1
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
@@ -890,6 +1154,7 @@ class Model(nn.Module):
         splicing_connectors_distance = []
         patch_token_hist = []
         mem_instance_masks = []
+        mem_traditional_features_list = []
             
         for image, cluster_feature, proj_patch_token in zip(
             few_shot_samples.chunk(self.k_shot), 
@@ -902,6 +1167,19 @@ class Model(nn.Module):
             if self.class_name == 'pushpins':
                 patch_token_hist.append(results["clip_patch_hist"])
                 mem_instance_masks.append(results['instance_masks'])
+                # 从 histogram 的结果中提取前景掩码
+                if 'binary_foreground' in results:
+                    np_image = to_np_img(image[0])
+                    foreground_mask = results['binary_foreground']
+                    # 提取传统特征
+                    traditional_features = self.extract_traditional_features(np_image, foreground_mask)
+                    if traditional_features is not None:
+                        # 如果维度还未设置，就用第一个成功提取的特征向量长度来设置它
+                        if self.traditional_feature_dim is None:
+                            self.traditional_feature_dim = len(traditional_features)
+                    else:
+                        traditional_features = np.zeros(self.traditional_feature_dim)
+                    mem_traditional_features_list.append(traditional_features)
 
             elif self.class_name == 'splicing_connectors':
                 foreground_pixel_hist.append(results["foreground_pixel_count"])
@@ -936,6 +1214,19 @@ class Model(nn.Module):
         mem_patch_feature_clip_coreset = patch_tokens_clip
         mem_patch_feature_dinov2_coreset = patch_tokens_dinov2
 
+        # 在函数的最后，计算并存储传统特征的统计数据
+        if mem_traditional_features_list:
+            self.mem_traditional_features = np.array(mem_traditional_features_list)
+            # 计算均值和协方差矩阵的逆，用于马氏距离
+            mean = np.mean(self.mem_traditional_features, axis=0)
+            self.mem_traditional_stats = {'mean': mean}
+            # 只在样本数大于1时才计算协方差
+            if self.mem_traditional_features.shape[0] > 1:
+                # 添加一个小的对角矩阵以保证协方差矩阵是可逆的 (regularization)
+                cov = np.cov(self.mem_traditional_features, rowvar=False)
+                cov_inv = np.linalg.pinv(cov + np.eye(cov.shape[0]) * 1e-5)#2) # 建议增加正则化强度
+                self.mem_traditional_stats['cov_inv'] = cov_inv # 将协方差的逆添加到字典中
+
         return scores, mem_patch_feature_clip_coreset, mem_patch_feature_dinov2_coreset
 
     
@@ -943,3 +1234,115 @@ class Model(nn.Module):
     def process(self, class_name: str, few_shot_samples: list[torch.Tensor]):
         few_shot_samples = self.transform(few_shot_samples).to(self.device)
         scores, self.mem_patch_feature_clip_coreset, self.mem_patch_feature_dinov2_coreset = self.process_k_shot(class_name, few_shot_samples)
+
+    def extract_traditional_features(self, img_rgb: np.ndarray, foreground_mask: np.ndarray) -> np.ndarray:
+        """
+        从给定的图像和前景掩码中提取传统CV特征向量。
+        该函数处理多个分离的轮廓（例如多个图钉），并返回一个聚合的、固定长度的特征向量。
+
+        Args:
+            image_rgb (np.ndarray): rgb格式的输入图像 (H, W, 3), uint8.
+            foreground_mask (np.ndarray): 前景掩码 (H, W), uint8, 0代表背景, >0代表前景.
+
+        Returns:
+            np.ndarray: 包含所有特征的、扁平化的一维Numpy数组。
+        """
+        # 0. 图像预处理
+        image_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+        gray_image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+        hsv_image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+
+        # 1. 寻找所有独立的物体轮廓
+        contours, _ = cv2.findContours(foreground_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # 如果没有检测到前景，返回一个零向量
+        if not contours:
+            # 返回一个与正常输出维度相同的零向量
+            # 这个维度需要根据下面特征的数量来确定，这里先用一个占位符
+            return None 
+
+        all_features_per_contour = []
+        
+        for cnt in contours:
+            # 过滤掉非常小的噪声轮廓
+            if cv2.contourArea(cnt) < 32:
+                continue
+
+            contour_features = []
+            
+            # --- 特征 A: 轮廓和形状 (Contour & Shape) ---
+            area = cv2.contourArea(cnt)
+            perimeter = cv2.arcLength(cnt, True)
+            
+            # 1. 圆形度 (Circularity) - 衡量轮廓有多像圆 (破损或弯曲会改变它)
+            circularity = (4 * np.pi * area) / (perimeter**2) if perimeter > 0 else 0
+            
+            # 2. 偏心率 (Eccentricity) - 衡量轮廓的拉伸程度 (前端弯曲会改变它)
+            try:
+                (x, y), (MA, ma), angle = cv2.fitEllipse(cnt)
+                # 先计算比率，再检查开方根内的值是否为非负
+                ratio = ma / MA if MA > 0 else 0
+                value_inside_sqrt = 1 - ratio**2
+                eccentricity = np.sqrt(value_inside_sqrt) if value_inside_sqrt >= 0 else 0
+            except cv2.error:
+                eccentricity = 0
+
+            # 3. Hu矩 (Hu Moments) - 7个具有平移、旋转、尺度不变性的形状描述符
+            moments = cv2.moments(cnt)
+            hu_moments = cv2.HuMoments(moments).flatten()
+            # Log-transform for scale invariance and stability
+            for i in range(len(hu_moments)):
+                # 加上一个极小值(epsilon)来防止log(0)产生-inf
+                value = abs(hu_moments[i]) + 1e-7 
+                hu_moments[i] = -1 * np.copysign(1.0, hu_moments[i]) * np.log10(value)
+
+
+            contour_features.extend([area, perimeter, circularity, eccentricity])
+            contour_features.extend(hu_moments)
+
+            # 创建一个用于提取颜色和纹理的掩码
+            single_contour_mask = np.zeros(gray_image.shape, dtype="uint8")
+            cv2.drawContours(single_contour_mask, [cnt], -1, 255, thickness=cv2.FILLED)
+
+            # --- 特征 B: 颜色 (Color) ---
+            # 4. HSV颜色直方图 (在H通道上) - 对颜色变化敏感
+            h_hist = cv2.calcHist([hsv_image], [0], single_contour_mask, [16], [0, 180])
+            cv2.normalize(h_hist, h_hist)
+            contour_features.extend(h_hist.flatten())
+
+            # --- 特征 C: 纹理 (Texture) ---
+            # 5. LBP (局部二值模式) - 对污染、划痕等纹理变化敏感
+            # 注意：LBP需要处理的区域不能太小
+            x, y, w, h = cv2.boundingRect(cnt)
+            roi_gray = gray_image[y:y+h, x:x+w]
+            roi_mask = single_contour_mask[y:y+h, x:x+w]
+            if roi_gray.size > 0:
+                P, R = 8, 1
+                lbp = local_binary_pattern(roi_gray, P, R, method="uniform")
+                # 只计算掩码内的LBP直方图
+                (lbp_hist, _) = np.histogram(lbp[roi_mask > 0], bins=np.arange(0, P + 3), range=(0, P + 2))
+                lbp_hist = lbp_hist.astype("float")
+                lbp_hist /= (lbp_hist.sum() + 1e-6)
+                contour_features.extend(lbp_hist)
+            else: # 如果ROI为空，则填充0
+                contour_features.extend(np.zeros(10)) # LBP "uniform" 有 P+2 个bin
+
+            all_features_per_contour.append(np.array(contour_features))
+
+        # 如果所有轮廓都被过滤掉了，返回零向量
+        if not all_features_per_contour:
+            return None 
+
+        # --- 特征聚合 ---
+        # 使用均值和标准差来聚合所有检测到的物体的特征，这样即使物体数量变化，特征向量长度也固定
+        # 这对于检测"Missing_separator"非常重要
+        features_matrix = np.array(all_features_per_contour)
+        mean_features = np.mean(features_matrix, axis=0)
+        std_features = np.std(features_matrix, axis=0)
+        
+        # 最终的特征向量
+        final_feature_vector = np.concatenate([mean_features, std_features])
+        # 将任何可能残余的NaN, inf, -inf值都替换为0
+        final_feature_vector = np.nan_to_num(final_feature_vector, nan=0.0, posinf=0.0, neginf=0.0)
+            
+        return final_feature_vector
