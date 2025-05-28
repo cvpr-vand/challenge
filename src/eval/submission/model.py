@@ -352,7 +352,7 @@ class Model(nn.Module):
 
         #     self.sampler = GreedyCoresetSampler(percentage= 0.4 / self.shot, device=self.device)
 
-        self.sampler = GreedyCoresetSampler(percentage= 0.2 / self.shot, device=self.device)
+        self.sampler = GreedyCoresetSampler(percentage= 0.18 / self.shot, device=self.device)
 
         
         if self.class_name == "screw_bag":
