@@ -1,10 +1,32 @@
 name: Evaluation Workflow
 
 on:
-  pull_request_target:
-    types: [opened, synchronize]
-    paths:
-      - "src/eval/submission/**"
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull Request Number"
+        required: true
+        type: string
+      pr_repo:
+        description: "Pull Request Repository (format: owner/repo)"
+        required: true
+        type: string
+      pr_branch:
+        description: "Pull Request Branch"
+        required: true
+        type: string
+      pr_user:
+        description: "Pull Request Author"
+        required: true
+        type: string
+      pr_title:
+        description: "Pull Request Title"
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.user.login }}
+  cancel-in-progress: true
 
 jobs:
   security-check:
@@ -31,19 +53,19 @@ jobs:
     steps:
       - name: Debug PR info
         run: |
-          echo "Branch: ${{ github.event.pull_request.head.ref }}"
-          echo "Repo: ${{ github.event.pull_request.head.repo.full_name }}"
+          echo "Branch: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_branch || github.event.pull_request.head.ref }}"
+          echo "Repo: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_repo || github.event.pull_request.head.repo.full_name }}"
       - name: Checkout PR code for evaluation
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_repo || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_branch || github.event.pull_request.head.ref }}
           persist-credentials: false
       - name: Save PR User and Number
         env:
-          PR_USER: ${{ github.event.pull_request.user.login }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_NAME: ${{ github.event.pull_request.title }}
+          PR_USER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_user || github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || github.event.pull_request.number }}
+          PR_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_title || github.event.pull_request.title }}
         run: |
           echo $PR_USER > pr_user.txt
           echo $PR_NUMBER > pr_number.txt
