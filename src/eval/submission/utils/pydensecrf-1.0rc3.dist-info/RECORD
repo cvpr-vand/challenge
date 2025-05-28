@@ -1,0 +1,13 @@
+pydensecrf-1.0rc3.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+pydensecrf-1.0rc3.dist-info/METADATA,sha256=4EctF6pPuHOrKW2S8RzlqiCcesKkTpAbkJiaY_9tXPU,789
+pydensecrf-1.0rc3.dist-info/RECORD,,
+pydensecrf-1.0rc3.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+pydensecrf-1.0rc3.dist-info/WHEEL,sha256=z7jxKkYRKKJ7SfPfMKwPqpTzAxGIqIt5_V74YUShghE,105
+pydensecrf-1.0rc3.dist-info/direct_url.json,sha256=-EOrX5EGPrIsjv5usSpL8N5N_Qx4sWWh6GCaALvBEAo,106
+pydensecrf-1.0rc3.dist-info/top_level.txt,sha256=K_podHejDPtYkoV-JEAW_EjDsMi2mnTpHfHhFOtJsOE,11
+pydensecrf/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+pydensecrf/__pycache__/__init__.cpython-310.pyc,,
+pydensecrf/__pycache__/utils.cpython-310.pyc,,
+pydensecrf/densecrf.cpython-310-x86_64-linux-gnu.so,sha256=-Yt5VigZWrOrX8i0mzV_gjAkz4GdvVdnGMqoL_Rs72M,527288
+pydensecrf/eigen.cpython-310-x86_64-linux-gnu.so,sha256=6nZcJVOnJYgFJTB0z5CDcKZUQr85QJtj5GOT04UNsAQ,186712
+pydensecrf/utils.py,sha256=d424mBBapXaJ3r1lIpBslURjFprdkMYt6h3pM9yDhdc,6852

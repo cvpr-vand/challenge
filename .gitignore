@@ -9,3 +9,7 @@ __pycache__/
 *.egg-info/
 .env
 datasets
+
+/*_heat/
+metrics.csv
+results.json
