@@ -397,28 +397,28 @@ class Model(nn.Module):
 
             if self.class_name == 'pushpins':
                 pred_score = max(standard_instance_hungarian_match_score, standard_structural_score, standard_traditional_score)
-                # 结合阈值进行判断
-                reasons = [] # 用于记录异常原因，便于调试
-                for score_name, score_value in list_of_scores.items():
-                    if score_name == 'head_area_score':
-                        threshold_info = self.threshold_stats2[score_name]
-                    else:
-                        threshold_info = self.threshold_stats[score_name]
-                    threshold = threshold_info['threshold']
-                    # 对污染使用您在inspector中定义的固定像素阈值
-                    # if score_name == 'contamination_score':
-                    #     if score_value > inspector.CONTAMINATION_PIXEL_THRESHOLD:
-                    #         self.anomaly_flag = True
-                    #         reasons.append(f"{score_name} | 计数值:{score_value} > 阈值:{inspector.CONTAMINATION_PIXEL_THRESHOLD}")
-                    # 其他分数都是值越大越异常
-                    # elif score_name == 'head_shape_score':
-                    #     if score_value > threshold:
-                    #         self.anomaly_flag = True
-                    #         reasons.append(f"{score_name} | 值:{score_value:.4f} > 阈值:{threshold:.4f}")
-                    if score_name == 'head_area_score':
-                        if score_value > threshold:
-                            self.anomaly_flag = True
-                            reasons.append(f"{score_name} | 值:{score_value:.4f} > 阈值:{threshold:.4f}")
+                # # 结合阈值进行判断
+                # reasons = [] # 用于记录异常原因，便于调试
+                # for score_name, score_value in list_of_scores.items():
+                #     if score_name == 'head_area_score':
+                #         threshold_info = self.threshold_stats2[score_name]
+                #     else:
+                #         threshold_info = self.threshold_stats[score_name]
+                #     threshold = threshold_info['threshold']
+                #     # 对污染使用您在inspector中定义的固定像素阈值
+                #     # if score_name == 'contamination_score':
+                #     #     if score_value > inspector.CONTAMINATION_PIXEL_THRESHOLD:
+                #     #         self.anomaly_flag = True
+                #     #         reasons.append(f"{score_name} | 计数值:{score_value} > 阈值:{inspector.CONTAMINATION_PIXEL_THRESHOLD}")
+                #     # 其他分数都是值越大越异常
+                #     # elif score_name == 'head_shape_score':
+                #     #     if score_value > threshold:
+                #     #         self.anomaly_flag = True
+                #     #         reasons.append(f"{score_name} | 值:{score_value:.4f} > 阈值:{threshold:.4f}")
+                #     if score_name == 'head_area_score':
+                #         if score_value > threshold:
+                #             self.anomaly_flag = True
+                #             reasons.append(f"{score_name} | 值:{score_value:.4f} > 阈值:{threshold:.4f}")
             else:
                 pred_score = max(standard_instance_hungarian_match_score, standard_structural_score)
             pred_score = sigmoid(pred_score)
