@@ -1,5 +1,5 @@
 __pycache__/
-*.pyc
+# *.pyc
 *.pyo
 *.pyd
 *.pyw
@@ -9,3 +9,12 @@ __pycache__/
 *.egg-info/
 .env
 datasets
+
+cache/
+checkpoint/
+
+*.log
+results*.json
+metrics*.csv
+results/
+run.sh
