@@ -3,11 +3,13 @@ name = "vand2025_eval"
 version = "0.1.0"
 description = "VAND 2025 evaluation script"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = "==3.10.12"
 dependencies = [
     "anomalib[full]",
     "scikit-learn",
     # TODO: Add your additional dependencies here
+    "kmeans-pytorch==0.3",
+    "accelerate"
 ]
 
 [tool.uv.sources]
