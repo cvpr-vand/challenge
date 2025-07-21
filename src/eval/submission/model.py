@@ -39,5 +39,5 @@ class Model(nn.Module):
         batch_size = image.shape[0]
         return ImageBatch(
             image=image,
-            pred_score=torch.zeros(batch_size, device=image.device),
+            pred_score=torch.rand(batch_size, device=image.device),
         )
